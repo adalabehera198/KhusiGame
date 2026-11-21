@@ -1,10 +1,10 @@
 (() => {
   'use strict';
 
-  const FAR_Z = 76;
-  const NEAR_Z = 2.2;
+  const FAR_Z = 82;
+  const NEAR_Z = 2.0;
   const PLAYER_Z_OFFSET = 4.2;
-  const RACE_FINISH_Z = 750; // 1500m rally race (1 unit = 2m)
+  const RACE_FINISH_Z = 750; // 1500m desert rally
 
   const atv = {
     x: 0,
@@ -12,9 +12,10 @@
     y: 0,
     vy: 0,
     vx: 0,
-    vz: 20,
+    vz: 22,
     camX: 0,
-    camY: 4,
+    camY: 2.5,
+    camPitch: 0,
     onGround: true,
     lean: 0,
     spinAngle: 0,
@@ -32,18 +33,18 @@
     finished: false,
   };
 
-  let rivals = [];    // { name, color, helmet, x, z, y, vy, baseSpeed, phase, finished }
-  let items = [];     // { type: 'cactus'|'rock'|'palm'|'ramp'|'star'|'boost', x, z, yOffset, hit, pulse }
-  let tracks = [];    // { x, z, y }
-  let particles = []; // { x, y, z, vx, vy, vz, life, maxLife, size, color }
+  let rivals = [];
+  let items = [];
+  let tracks = [];
+  let particles = [];
 
+  // Giant asymmetric sand dunes (steep slip-faces + sweeping crests!)
   function getDuneY(wx, wz) {
-    const rollingDunes = Math.sin(wz * 0.06) * 2.9 + Math.cos(wz * 0.025) * 2.3;
-    const crossDune = Math.sin(wx * 0.08 + wz * 0.03) * 1.1;
-    const ripples = Math.sin(wx * 0.22 + wz * 0.16) * 0.18;
-    const distFromCenter = Math.max(0, Math.abs(wx) - 20);
-    const canyonSides = Math.min(18, distFromCenter * distFromCenter * 0.011);
-    return rollingDunes + crossDune + ripples + canyonSides;
+    const phase = wz * 0.055 + Math.sin(wx * 0.045) * 0.8;
+    const primaryDune = (Math.sin(phase) + 0.38 * Math.sin(phase * 2)) * 8.5;
+    const crossDune = Math.sin(wx * 0.075 + wz * 0.022) * 3.2;
+    const megaWave = Math.cos(wz * 0.018) * 5.0;
+    return primaryDune + crossDune + megaWave;
   }
 
   function getDuneSlopeZ(wx, wz) {
@@ -53,9 +54,9 @@
 
   function initRivals() {
     rivals = [
-      { name: 'Sunny', color: '#3a86ff', helmet: '#ffd166', x: -5.5, z: 4, y: 0, vy: 0, baseSpeed: 23.5, phase: 0.4, finished: false },
-      { name: 'Blaze', color: '#8338ec', helmet: '#ff006e', x: 5.5, z: 6, y: 0, vy: 0, baseSpeed: 25.0, phase: 1.9, finished: false },
-      { name: 'Turbo', color: '#06d6a0', helmet: '#ffbe0b', x: 0.5, z: 8, y: 0, vy: 0, baseSpeed: 26.2, phase: 3.1, finished: false },
+      { name: 'Sunny', color: '#3a86ff', helmet: '#ffd166', x: -5.5, z: 5, y: 0, baseSpeed: 25.0, phase: 0.4 },
+      { name: 'Blaze', color: '#8338ec', helmet: '#ff006e', x: 5.5, z: 7, y: 0, baseSpeed: 26.5, phase: 1.9 },
+      { name: 'Turbo', color: '#06d6a0', helmet: '#ffbe0b', x: 0.5, z: 9, y: 0, baseSpeed: 27.8, phase: 3.1 },
     ];
     for (const r of rivals) {
       r.y = getDuneY(r.x, r.z);
@@ -69,9 +70,10 @@
     atv.y = startGround;
     atv.vy = 0;
     atv.vx = 0;
-    atv.vz = 19;
+    atv.vz = 22;
     atv.camX = 0;
-    atv.camY = startGround + 3.5;
+    atv.camY = startGround + 2.2;
+    atv.camPitch = getDuneSlopeZ(0, PLAYER_Z_OFFSET) * 0.55;
     atv.onGround = true;
     atv.lean = 0;
     atv.spinAngle = 0;
@@ -103,38 +105,38 @@
 
       if (roll < 0.30) {
         const dir = Math.random() < 0.5 ? -1 : 1;
-        const startX = center + (Math.random() - 0.5) * 14;
+        const startX = center + (Math.random() - 0.5) * 16;
         for (let i = 0; i < 5; i++) {
           items.push({
             type: 'star',
-            x: startX + dir * Math.sin(i * 0.7) * 3.5,
+            x: startX + dir * Math.sin(i * 0.7) * 3.8,
             z: z + i * 2.8,
-            yOffset: 0.75,
+            yOffset: 0.8,
             hit: false,
             pulse: i * 0.6,
           });
         }
       } else if (roll < 0.48) {
-        const rx = center + (Math.random() - 0.5) * 14;
+        const rx = center + (Math.random() - 0.5) * 16;
         items.push({ type: 'ramp', x: rx, z, yOffset: 0, hit: false, pulse: 0 });
         for (let i = 1; i <= 3; i++) {
           items.push({
             type: 'star',
             x: rx,
             z: z + i * 3.6,
-            yOffset: 1.0 + Math.sin((i / 4) * Math.PI) * 2.4,
+            yOffset: 1.2 + Math.sin((i / 4) * Math.PI) * 2.8,
             hit: false,
             pulse: i * 0.5,
           });
         }
       } else if (roll < 0.62) {
-        const bx = center + (Math.random() - 0.5) * 16;
+        const bx = center + (Math.random() - 0.5) * 18;
         items.push({ type: 'boost', x: bx, z, yOffset: 0, hit: false, pulse: 0 });
       }
 
       const obstacleCount = 2 + Math.floor(Math.random() * 2);
       for (let i = 0; i < obstacleCount; i++) {
-        const ox = center + (Math.random() - 0.5) * 56;
+        const ox = center + (Math.random() - 0.5) * 60;
         if (z < 24 && Math.abs(ox) < 4) continue;
         const tRoll = Math.random();
         const type = tRoll < 0.48 ? 'cactus' : tRoll < 0.8 ? 'rock' : 'palm';
@@ -173,13 +175,14 @@
     const relZ = wz - atv.z;
     if (relZ < 0.5 || relZ > FAR_Z + 8) return null;
 
-    const horizonY = height * 0.28;
-    const focal = Math.min(width, height) * 0.92;
+    const horizonY = height * 0.36;
+    const focal = Math.min(width, height) * 0.95;
     const persp = focal / relZ;
 
-    const relY = wy - atv.camY;
+    // Camera pitches with the dune slope so hills fill the view when climbing & drop away on crests!
+    const relY = wy - atv.camY - relZ * atv.camPitch;
     const screenX = width * 0.5 + (wx - atv.camX) * persp * 0.085;
-    const screenY = horizonY + (relZ * 0.14 - relY * 0.85) * persp * 0.22;
+    const screenY = horizonY + (relZ * 0.08 - relY * 0.95) * persp * 0.22;
 
     return { x: screenX, y: screenY, persp: persp / 240, relZ };
   }
@@ -191,21 +194,21 @@
     const playerWorldZ = atv.z + PLAYER_Z_OFFSET;
     const slopeZ = getDuneSlopeZ(atv.x, playerWorldZ);
 
-    // Gas / Brake / Boost speed
+    // Gas / Brake / Boost speed + gravity along dune slope
     const targetSpeed = atv.boostTimer > 0
-      ? 38
+      ? 40
       : (keys.tuck || keys.gas)
-        ? 30
+        ? 32 - slopeZ * 6.0
         : keys.brake
           ? 12
-          : 22 - slopeZ * 4.0;
+          : 23 - slopeZ * 5.5;
 
-    atv.vz += (targetSpeed - atv.vz) * Math.min(1, dt * 4.2);
+    atv.vz += (Math.max(10, targetSpeed) - atv.vz) * Math.min(1, dt * 4.0);
 
-    // Steering across dunes
+    // Freeform steering left & right
     const steerInput = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-    const maxLatSpeed = 16.5;
-    const latAccel = 46;
+    const maxLatSpeed = 18;
+    const latAccel = 48;
 
     if (steerInput !== 0) {
       atv.vx += steerInput * latAccel * dt;
@@ -214,11 +217,11 @@
       atv.vx *= Math.pow(0.04, dt);
     }
 
-    atv.lean += (steerInput * 0.38 - atv.lean) * Math.min(1, dt * 10);
+    atv.lean += (steerInput * 0.42 - atv.lean) * Math.min(1, dt * 10);
 
     // Hop
     if (jumpOnce && atv.onGround) {
-      atv.vy = 10.5;
+      atv.vy = 12.0 + Math.max(0, slopeZ * atv.vz * 0.35);
       atv.onGround = false;
       atv.trickDone = false;
       callbacks.playJump();
@@ -231,10 +234,11 @@
     const groundY = getDuneY(atv.x, nextWorldZ);
 
     if (atv.onGround) {
+      // Launch into Big Air naturally when cresting a giant dune!
       const expectedY = atv.y + slopeZ * atv.vz * dt;
-      if (expectedY - groundY > 0.22 && atv.vz > 22) {
+      if (expectedY - groundY > 0.16 && atv.vz > 20) {
         atv.onGround = false;
-        atv.vy = Math.max(2.5, slopeZ * atv.vz * 0.75);
+        atv.vy = Math.max(3.5, slopeZ * atv.vz * 0.85);
         atv.trickDone = false;
       } else {
         atv.y = groundY;
@@ -244,13 +248,13 @@
         if (tracks.length === 0 || nextWorldZ - tracks[tracks.length - 1].z > 0.55) {
           tracks.push({ x: atv.x, z: nextWorldZ, y: groundY });
         }
-        if (Math.random() < 0.55) {
+        if (Math.random() < 0.65) {
           const dustCol = atv.boostTimer > 0 ? '#ff9f1c' : '#e9b872';
           emitSand(atv.x, groundY + 0.1, nextWorldZ, 1, dustCol);
         }
       }
     } else {
-      atv.vy -= 25 * dt;
+      atv.vy -= 26 * dt;
       atv.y += atv.vy * dt;
 
       if (steerInput !== 0) {
@@ -260,7 +264,7 @@
           atv.tricks += 1;
           atv.bonusScore += 50;
           callbacks.playFlip();
-          callbacks.showBanner('360° Spin! +50 🛞');
+          callbacks.showBanner('360° Dune Spin! +50 🛞');
         }
       }
 
@@ -269,30 +273,29 @@
         atv.vy = 0;
         atv.onGround = true;
         atv.spinAngle = 0;
-        emitSand(atv.x, groundY + 0.1, nextWorldZ, 10);
+        emitSand(atv.x, groundY + 0.1, nextWorldZ, 12);
       }
     }
 
     // Update Rival Racers
     let aheadCount = 0;
     for (const r of rivals) {
-      const weave = Math.sin(time * 1.3 + r.phase) * 4.5;
+      const weave = Math.sin(time * 1.3 + r.phase) * 5.0;
       const targetX = atv.x * 0.25 + weave;
       r.x += (targetX - r.x) * Math.min(1, dt * 1.2);
-      // Rubber-band slightly so race stays exciting!
       const diffZ = r.z - nextWorldZ;
       const rubber = diffZ > 22 ? -2.2 : diffZ < -18 ? 2.5 : 0;
       r.z += (r.baseSpeed + rubber) * dt;
       r.y = getDuneY(r.x, r.z);
 
-      if (Math.random() < 0.25) {
+      if (Math.random() < 0.28) {
         emitSand(r.x, r.y + 0.1, r.z, 1, '#e9b872');
       }
       if (r.z > nextWorldZ) aheadCount++;
     }
     atv.place = 1 + aheadCount;
 
-    // Check Finish Line!
+    // Finish Line
     if (nextWorldZ >= RACE_FINISH_Z && !atv.finished) {
       atv.finished = true;
       const placeBonus = (5 - atv.place) * 150;
@@ -305,9 +308,12 @@
       }, 900);
     }
 
+    // Camera follows rider & pitches smoothly with dune slope
     atv.camX += (atv.x - atv.camX) * Math.min(1, dt * 6.5);
-    const targetCamY = Math.max(groundY, atv.y) + 3.6;
-    atv.camY += (targetCamY - atv.camY) * Math.min(1, dt * 5.5);
+    const targetCamY = Math.max(groundY, atv.y) + 2.3;
+    atv.camY += (targetCamY - atv.camY) * Math.min(1, dt * 7.0);
+    const targetPitch = Math.max(-0.35, Math.min(0.35, slopeZ * 0.45));
+    atv.camPitch += (targetPitch - atv.camPitch) * Math.min(1, dt * 4.5);
     atv.scarfPhase += dt * (7 + atv.vz * 0.25);
 
     // Item collisions
@@ -320,7 +326,7 @@
       const heightAbove = atv.y - itemGroundY;
 
       if (item.type === 'star') {
-        if (dx < 1.7 && Math.abs(item.yOffset - heightAbove) < 2.0) {
+        if (dx < 1.8 && Math.abs(item.yOffset - heightAbove) < 2.2) {
           item.hit = true;
           atv.stars += 1;
           atv.bonusScore += 15;
@@ -328,10 +334,10 @@
           emitSand(item.x, itemGroundY + item.yOffset, item.z, 8, '#ffd166');
         }
       } else if (item.type === 'ramp') {
-        if (dx < 2.0 && heightAbove < 0.9) {
+        if (dx < 2.0 && heightAbove < 1.0) {
           item.hit = true;
-          atv.vy = 14.5;
-          atv.y = itemGroundY + 0.35;
+          atv.vy = 16.0;
+          atv.y = itemGroundY + 0.4;
           atv.onGround = false;
           atv.trickDone = false;
           atv.tricks += 1;
@@ -387,19 +393,19 @@
   }
 
   function render(ctx, width, height, time) {
-    const horizonY = height * 0.28;
+    const horizonY = height * 0.36;
 
     // Warm Desert Sky
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY + 80);
-    skyGrad.addColorStop(0, '#4ea8de');
-    skyGrad.addColorStop(0.6, '#90e0ef');
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY + 120);
+    skyGrad.addColorStop(0, '#3a86ff');
+    skyGrad.addColorStop(0.55, '#8ecae6');
     skyGrad.addColorStop(1, '#ffe5b4');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
 
     // Sun
     const sunX = width * 0.8;
-    const sunY = horizonY * 0.45;
+    const sunY = horizonY * 0.42;
     const sunGlow = ctx.createRadialGradient(sunX, sunY, 12, sunX, sunY, 95);
     sunGlow.addColorStop(0, 'rgba(255, 245, 190, 0.95)');
     sunGlow.addColorStop(1, 'rgba(255, 210, 110, 0)');
@@ -408,9 +414,9 @@
     ctx.arc(sunX, sunY, 95, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3D Sand Dune Terrain Mesh (far-to-near)
-    const dz = 3.0;
-    const dx = 6.0;
+    // 3D Sand Dune Mesh (far-to-near with strong sunlit vs slip-face shading!)
+    const dz = 2.8;
+    const dx = 5.5;
     const zStart = Math.floor(atv.z / dz) * dz;
     const xMin = Math.floor((atv.camX - 66) / dx) * dx;
     const xMax = Math.ceil((atv.camX + 66) / dx) * dx;
@@ -435,10 +441,10 @@
 
         const slopeFwd = ((y01 + y11) - (y00 + y10)) * 0.5 / dz;
         const slopeSide = ((y10 + y11) - (y00 + y01)) * 0.5 / dx;
-        const light = Math.max(0, Math.min(1, 0.65 - slopeFwd * 0.45 + slopeSide * 0.25));
-        const r = Math.round(218 + light * 37);
-        const g = Math.round(145 + light * 70);
-        const b = Math.round(70 + light * 55);
+        const light = Math.max(0, Math.min(1, 0.55 - slopeFwd * 0.55 + slopeSide * 0.45));
+        const r = Math.round(188 + light * 67);
+        const g = Math.round(110 + light * 108);
+        const b = Math.round(45 + light * 80);
 
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath();
@@ -452,7 +458,7 @@
     }
 
     // Tire Tracks
-    ctx.strokeStyle = 'rgba(175, 108, 45, 0.5)';
+    ctx.strokeStyle = 'rgba(155, 88, 30, 0.55)';
     ctx.lineWidth = 3;
     for (let i = 1; i < tracks.length; i++) {
       const a = project(tracks[i - 1].x, tracks[i - 1].y, tracks[i - 1].z, width, height);
@@ -468,7 +474,7 @@
       ctx.stroke();
     }
 
-    // Finish Line Banner if in view
+    // Finish Line Banner
     if (RACE_FINISH_Z - atv.z > 1 && RACE_FINISH_Z - atv.z < FAR_Z) {
       const fL = project(atv.camX - 18, getDuneY(atv.camX - 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
       const fR = project(atv.camX + 18, getDuneY(atv.camX + 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
@@ -484,7 +490,6 @@
       }
     }
 
-    // Depth-sort items + rivals + player
     const drawList = [];
     for (const item of items) {
       const wy = getDuneY(item.x, item.z) + item.yOffset;
@@ -511,7 +516,6 @@
       else drawATV3D(ctx, entry.p, entry.shadowP, entry.h, atv.boostTimer > 0 ? '#ff006e' : '#ff9f1c', '#ff5400', atv.lean, atv.spinAngle, true, time);
     }
 
-    // Sand Particles
     for (const pt of particles) {
       const p = project(pt.x, pt.y, pt.z, width, height);
       if (!p) continue;
@@ -523,7 +527,7 @@
     }
     ctx.globalAlpha = 1;
 
-    // Race Position Pill in top-center
+    // Race Position Pill
     ctx.save();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.beginPath();
@@ -649,33 +653,28 @@
 
     const bounce = Math.sin(time * 22) * 1.1 * s;
 
-    // Rear Chunky Tires
     ctx.fillStyle = '#2b2d42';
     ctx.beginPath();
     ctx.roundRect(-24 * s, -16 * s, 12 * s, 18 * s, 4 * s);
     ctx.roundRect(12 * s, -16 * s, 12 * s, 18 * s, 4 * s);
     ctx.fill();
 
-    // ATV Rear Chassis
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.roundRect(-17 * s, -28 * s + bounce, 34 * s, 18 * s, 7 * s);
     ctx.fill();
 
-    // Tail Lights
     ctx.fillStyle = '#ff0033';
     ctx.beginPath();
     ctx.arc(-11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
     ctx.arc(11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
     ctx.fill();
 
-    // Rider Torso
     ctx.fillStyle = '#48cae4';
     ctx.beginPath();
     ctx.roundRect(-11 * s, -44 * s + bounce, 22 * s, 20 * s, 7 * s);
     ctx.fill();
 
-    // Scarf (for player)
     if (isPlayer) {
       ctx.strokeStyle = '#ff4d6d';
       ctx.lineWidth = Math.max(3, 5 * s);
@@ -691,7 +690,6 @@
       ctx.stroke();
     }
 
-    // Helmet
     ctx.fillStyle = helmetColor;
     ctx.beginPath();
     ctx.arc(0, -52 * s + bounce, 10 * s, 0, Math.PI * 2);

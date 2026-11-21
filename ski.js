@@ -11,9 +11,10 @@
     y: 0,        // world Y position of skier
     vy: 0,       // vertical velocity
     vx: 0,       // lateral velocity
-    vz: 18,      // forward speed down the slope
+    vz: 20,      // forward speed down the slope
     camX: 0,
-    camY: 4,
+    camY: 2.5,
+    camPitch: 0,
     onGround: true,
     lean: 0,
     pitch: 0,
@@ -59,16 +60,15 @@
   }
   initEnvironment();
 
-  // 3D Mountain Slope Heightfield
-  // Combines rolling downhill hills, cross-contours, and wide alpine valley sides
+  // Steep 3D Mountain Ski Slope Heightfield
+  // Continuous downhill drop + big rolling ski rollers & alpine valley walls
   function getHillY(wx, wz) {
-    const rollingHills = Math.sin(wz * 0.065) * 2.8 + Math.cos(wz * 0.028) * 2.2;
-    const crossContour = Math.sin(wx * 0.085 + wz * 0.035) * 0.95;
-    const moguls = Math.sin(wx * 0.25) * Math.cos(wz * 0.18) * 0.22;
-    // Gentle wide alpine bowl far out on the sides (freeform center ~60 units wide)
-    const distFromCenter = Math.max(0, Math.abs(wx) - 18);
-    const valleySides = Math.min(18, distFromCenter * distFromCenter * 0.012);
-    return rollingHills + crossContour + moguls + valleySides;
+    const downhillDrop = -wz * 0.24;
+    const rollers = Math.sin(wz * 0.055) * 6.5 + Math.cos(wz * 0.022) * 5.0;
+    const crossContour = Math.sin(wx * 0.08 + wz * 0.03) * 1.8;
+    const distFromCenter = Math.max(0, Math.abs(wx) - 20);
+    const valleySides = Math.min(22, distFromCenter * distFromCenter * 0.015);
+    return downhillDrop + rollers + crossContour + valleySides;
   }
 
   function getHillSlopeZ(wx, wz) {
@@ -85,7 +85,8 @@
     ski.vx = 0;
     ski.vz = 18;
     ski.camX = 0;
-    ski.camY = startGround + 3.4;
+    ski.camY = startGround + 2.2;
+    ski.camPitch = getHillSlopeZ(0, SKIER_Z_OFFSET) * 0.65;
     ski.onGround = true;
     ski.lean = 0;
     ski.pitch = 0;
@@ -184,19 +185,18 @@
     }
   }
 
-  // True 3D perspective projection looking downhill
+  // True 3D perspective projection pitched downhill with the mountain slope
   function project(wx, wy, wz, width, height) {
     const relZ = wz - ski.z;
     if (relZ < 0.5 || relZ > FAR_Z + 8) return null;
 
-    const horizonY = height * 0.28;
-    const focal = Math.min(width, height) * 0.92;
+    const horizonY = height * 0.32;
+    const focal = Math.min(width, height) * 0.95;
     const persp = focal / relZ;
 
-    // Downhill camera tilt: looking slightly down the slope
-    const relY = wy - ski.camY;
+    const relY = wy - ski.camY - relZ * ski.camPitch;
     const screenX = width * 0.5 + (wx - ski.camX) * persp * 0.085;
-    const screenY = horizonY + (relZ * 0.14 - relY * 0.85) * persp * 0.22;
+    const screenY = horizonY + (relZ * 0.08 - relY * 0.95) * persp * 0.22;
 
     return { x: screenX, y: screenY, persp: persp / 240, relZ };
   }
@@ -294,10 +294,12 @@
       }
     }
 
-    // Smooth camera follow in X and Y
+    // Smooth camera follow in X, Y, and downhill pitch
     ski.camX += (ski.x - ski.camX) * Math.min(1, dt * 6.5);
-    const targetCamY = Math.max(groundY, ski.y) + 3.6;
-    ski.camY += (targetCamY - ski.camY) * Math.min(1, dt * 5.5);
+    const targetCamY = Math.max(groundY, ski.y) + 2.3;
+    ski.camY += (targetCamY - ski.camY) * Math.min(1, dt * 7.0);
+    const targetPitch = Math.max(-0.55, Math.min(0.25, slopeZ * 0.65));
+    ski.camPitch += (targetPitch - ski.camPitch) * Math.min(1, dt * 4.5);
     ski.scarfPhase += dt * (7 + ski.vz * 0.25);
 
     // Collisions with items near skier's Z
