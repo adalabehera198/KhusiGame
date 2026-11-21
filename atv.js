@@ -1,0 +1,717 @@
+(() => {
+  'use strict';
+
+  const FAR_Z = 76;
+  const NEAR_Z = 2.2;
+  const PLAYER_Z_OFFSET = 4.2;
+  const RACE_FINISH_Z = 750; // 1500m rally race (1 unit = 2m)
+
+  const atv = {
+    x: 0,
+    z: 0,
+    y: 0,
+    vy: 0,
+    vx: 0,
+    vz: 20,
+    camX: 0,
+    camY: 4,
+    onGround: true,
+    lean: 0,
+    spinAngle: 0,
+    trickDone: false,
+    invulnTimer: 0,
+    boostTimer: 0,
+    scarfPhase: 0,
+    nextSpawnZ: 18,
+    stars: 0,
+    tricks: 0,
+    hearts: 3,
+    bonusScore: 0,
+    distance: 0,
+    place: 1,
+    finished: false,
+  };
+
+  let rivals = [];    // { name, color, helmet, x, z, y, vy, baseSpeed, phase, finished }
+  let items = [];     // { type: 'cactus'|'rock'|'palm'|'ramp'|'star'|'boost', x, z, yOffset, hit, pulse }
+  let tracks = [];    // { x, z, y }
+  let particles = []; // { x, y, z, vx, vy, vz, life, maxLife, size, color }
+
+  function getDuneY(wx, wz) {
+    const rollingDunes = Math.sin(wz * 0.06) * 2.9 + Math.cos(wz * 0.025) * 2.3;
+    const crossDune = Math.sin(wx * 0.08 + wz * 0.03) * 1.1;
+    const ripples = Math.sin(wx * 0.22 + wz * 0.16) * 0.18;
+    const distFromCenter = Math.max(0, Math.abs(wx) - 20);
+    const canyonSides = Math.min(18, distFromCenter * distFromCenter * 0.011);
+    return rollingDunes + crossDune + ripples + canyonSides;
+  }
+
+  function getDuneSlopeZ(wx, wz) {
+    const dz = 0.5;
+    return (getDuneY(wx, wz + dz) - getDuneY(wx, wz - dz)) / (dz * 2);
+  }
+
+  function initRivals() {
+    rivals = [
+      { name: 'Sunny', color: '#3a86ff', helmet: '#ffd166', x: -5.5, z: 4, y: 0, vy: 0, baseSpeed: 23.5, phase: 0.4, finished: false },
+      { name: 'Blaze', color: '#8338ec', helmet: '#ff006e', x: 5.5, z: 6, y: 0, vy: 0, baseSpeed: 25.0, phase: 1.9, finished: false },
+      { name: 'Turbo', color: '#06d6a0', helmet: '#ffbe0b', x: 0.5, z: 8, y: 0, vy: 0, baseSpeed: 26.2, phase: 3.1, finished: false },
+    ];
+    for (const r of rivals) {
+      r.y = getDuneY(r.x, r.z);
+    }
+  }
+
+  function reset() {
+    atv.x = 0;
+    atv.z = 0;
+    const startGround = getDuneY(0, PLAYER_Z_OFFSET);
+    atv.y = startGround;
+    atv.vy = 0;
+    atv.vx = 0;
+    atv.vz = 19;
+    atv.camX = 0;
+    atv.camY = startGround + 3.5;
+    atv.onGround = true;
+    atv.lean = 0;
+    atv.spinAngle = 0;
+    atv.trickDone = false;
+    atv.invulnTimer = 0;
+    atv.boostTimer = 0;
+    atv.scarfPhase = 0;
+    atv.nextSpawnZ = 16;
+    atv.stars = 0;
+    atv.tricks = 0;
+    atv.hearts = 3;
+    atv.bonusScore = 0;
+    atv.distance = 0;
+    atv.place = 4;
+    atv.finished = false;
+
+    items = [];
+    tracks = [];
+    particles = [];
+    initRivals();
+    spawnAhead(FAR_Z);
+  }
+
+  function spawnAhead(targetZ) {
+    while (atv.nextSpawnZ < targetZ && atv.nextSpawnZ < RACE_FINISH_Z - 10) {
+      const z = atv.nextSpawnZ;
+      const center = atv.x;
+      const roll = Math.random();
+
+      if (roll < 0.30) {
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        const startX = center + (Math.random() - 0.5) * 14;
+        for (let i = 0; i < 5; i++) {
+          items.push({
+            type: 'star',
+            x: startX + dir * Math.sin(i * 0.7) * 3.5,
+            z: z + i * 2.8,
+            yOffset: 0.75,
+            hit: false,
+            pulse: i * 0.6,
+          });
+        }
+      } else if (roll < 0.48) {
+        const rx = center + (Math.random() - 0.5) * 14;
+        items.push({ type: 'ramp', x: rx, z, yOffset: 0, hit: false, pulse: 0 });
+        for (let i = 1; i <= 3; i++) {
+          items.push({
+            type: 'star',
+            x: rx,
+            z: z + i * 3.6,
+            yOffset: 1.0 + Math.sin((i / 4) * Math.PI) * 2.4,
+            hit: false,
+            pulse: i * 0.5,
+          });
+        }
+      } else if (roll < 0.62) {
+        const bx = center + (Math.random() - 0.5) * 16;
+        items.push({ type: 'boost', x: bx, z, yOffset: 0, hit: false, pulse: 0 });
+      }
+
+      const obstacleCount = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < obstacleCount; i++) {
+        const ox = center + (Math.random() - 0.5) * 56;
+        if (z < 24 && Math.abs(ox) < 4) continue;
+        const tRoll = Math.random();
+        const type = tRoll < 0.48 ? 'cactus' : tRoll < 0.8 ? 'rock' : 'palm';
+        items.push({
+          type,
+          x: ox,
+          z: z + Math.random() * 3,
+          yOffset: 0,
+          hit: false,
+          pulse: Math.random() * 0.35 + 0.85,
+        });
+      }
+
+      atv.nextSpawnZ += 4.8 + Math.random() * 2.8;
+    }
+  }
+
+  function emitSand(x, y, z, count, color = '#f4c27a') {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x,
+        y,
+        z,
+        vx: (Math.random() - 0.5) * 7,
+        vy: 1.5 + Math.random() * 4.5,
+        vz: (Math.random() - 0.5) * 4,
+        life: 0.38 + Math.random() * 0.25,
+        maxLife: 0.63,
+        size: 3 + Math.random() * 4,
+        color,
+      });
+    }
+  }
+
+  function project(wx, wy, wz, width, height) {
+    const relZ = wz - atv.z;
+    if (relZ < 0.5 || relZ > FAR_Z + 8) return null;
+
+    const horizonY = height * 0.28;
+    const focal = Math.min(width, height) * 0.92;
+    const persp = focal / relZ;
+
+    const relY = wy - atv.camY;
+    const screenX = width * 0.5 + (wx - atv.camX) * persp * 0.085;
+    const screenY = horizonY + (relZ * 0.14 - relY * 0.85) * persp * 0.22;
+
+    return { x: screenX, y: screenY, persp: persp / 240, relZ };
+  }
+
+  function update(dt, keys, jumpOnce, callbacks, time) {
+    if (atv.invulnTimer > 0) atv.invulnTimer -= dt;
+    if (atv.boostTimer > 0) atv.boostTimer -= dt;
+
+    const playerWorldZ = atv.z + PLAYER_Z_OFFSET;
+    const slopeZ = getDuneSlopeZ(atv.x, playerWorldZ);
+
+    // Gas / Brake / Boost speed
+    const targetSpeed = atv.boostTimer > 0
+      ? 38
+      : (keys.tuck || keys.gas)
+        ? 30
+        : keys.brake
+          ? 12
+          : 22 - slopeZ * 4.0;
+
+    atv.vz += (targetSpeed - atv.vz) * Math.min(1, dt * 4.2);
+
+    // Steering across dunes
+    const steerInput = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    const maxLatSpeed = 16.5;
+    const latAccel = 46;
+
+    if (steerInput !== 0) {
+      atv.vx += steerInput * latAccel * dt;
+      atv.vx = Math.max(-maxLatSpeed, Math.min(maxLatSpeed, atv.vx));
+    } else {
+      atv.vx *= Math.pow(0.04, dt);
+    }
+
+    atv.lean += (steerInput * 0.38 - atv.lean) * Math.min(1, dt * 10);
+
+    // Hop
+    if (jumpOnce && atv.onGround) {
+      atv.vy = 10.5;
+      atv.onGround = false;
+      atv.trickDone = false;
+      callbacks.playJump();
+      emitSand(atv.x, atv.y + 0.1, playerWorldZ, 10);
+    }
+
+    atv.x += atv.vx * dt;
+    atv.z += atv.vz * dt;
+    const nextWorldZ = atv.z + PLAYER_Z_OFFSET;
+    const groundY = getDuneY(atv.x, nextWorldZ);
+
+    if (atv.onGround) {
+      const expectedY = atv.y + slopeZ * atv.vz * dt;
+      if (expectedY - groundY > 0.22 && atv.vz > 22) {
+        atv.onGround = false;
+        atv.vy = Math.max(2.5, slopeZ * atv.vz * 0.75);
+        atv.trickDone = false;
+      } else {
+        atv.y = groundY;
+        atv.vy = 0;
+        atv.spinAngle = 0;
+
+        if (tracks.length === 0 || nextWorldZ - tracks[tracks.length - 1].z > 0.55) {
+          tracks.push({ x: atv.x, z: nextWorldZ, y: groundY });
+        }
+        if (Math.random() < 0.55) {
+          const dustCol = atv.boostTimer > 0 ? '#ff9f1c' : '#e9b872';
+          emitSand(atv.x, groundY + 0.1, nextWorldZ, 1, dustCol);
+        }
+      }
+    } else {
+      atv.vy -= 25 * dt;
+      atv.y += atv.vy * dt;
+
+      if (steerInput !== 0) {
+        atv.spinAngle += steerInput * 7.5 * dt;
+        if (Math.abs(atv.spinAngle) >= Math.PI * 1.75 && !atv.trickDone) {
+          atv.trickDone = true;
+          atv.tricks += 1;
+          atv.bonusScore += 50;
+          callbacks.playFlip();
+          callbacks.showBanner('360° Spin! +50 🛞');
+        }
+      }
+
+      if (atv.y <= groundY) {
+        atv.y = groundY;
+        atv.vy = 0;
+        atv.onGround = true;
+        atv.spinAngle = 0;
+        emitSand(atv.x, groundY + 0.1, nextWorldZ, 10);
+      }
+    }
+
+    // Update Rival Racers
+    let aheadCount = 0;
+    for (const r of rivals) {
+      const weave = Math.sin(time * 1.3 + r.phase) * 4.5;
+      const targetX = atv.x * 0.25 + weave;
+      r.x += (targetX - r.x) * Math.min(1, dt * 1.2);
+      // Rubber-band slightly so race stays exciting!
+      const diffZ = r.z - nextWorldZ;
+      const rubber = diffZ > 22 ? -2.2 : diffZ < -18 ? 2.5 : 0;
+      r.z += (r.baseSpeed + rubber) * dt;
+      r.y = getDuneY(r.x, r.z);
+
+      if (Math.random() < 0.25) {
+        emitSand(r.x, r.y + 0.1, r.z, 1, '#e9b872');
+      }
+      if (r.z > nextWorldZ) aheadCount++;
+    }
+    atv.place = 1 + aheadCount;
+
+    // Check Finish Line!
+    if (nextWorldZ >= RACE_FINISH_Z && !atv.finished) {
+      atv.finished = true;
+      const placeBonus = (5 - atv.place) * 150;
+      atv.bonusScore += placeBonus;
+      const suffix = atv.place === 1 ? '1st 🥇' : atv.place === 2 ? '2nd 🥈' : atv.place === 3 ? '3rd 🥉' : '4th 🏁';
+      callbacks.playFlip();
+      callbacks.showBanner(`Finish! ${suffix} (+${placeBonus})`);
+      setTimeout(() => {
+        callbacks.triggerGameOver();
+      }, 900);
+    }
+
+    atv.camX += (atv.x - atv.camX) * Math.min(1, dt * 6.5);
+    const targetCamY = Math.max(groundY, atv.y) + 3.6;
+    atv.camY += (targetCamY - atv.camY) * Math.min(1, dt * 5.5);
+    atv.scarfPhase += dt * (7 + atv.vz * 0.25);
+
+    // Item collisions
+    for (const item of items) {
+      if (item.hit) continue;
+      if (Math.abs(item.z - nextWorldZ) > 1.2) continue;
+
+      const dx = Math.abs(item.x - atv.x);
+      const itemGroundY = getDuneY(item.x, item.z);
+      const heightAbove = atv.y - itemGroundY;
+
+      if (item.type === 'star') {
+        if (dx < 1.7 && Math.abs(item.yOffset - heightAbove) < 2.0) {
+          item.hit = true;
+          atv.stars += 1;
+          atv.bonusScore += 15;
+          callbacks.playStar();
+          emitSand(item.x, itemGroundY + item.yOffset, item.z, 8, '#ffd166');
+        }
+      } else if (item.type === 'ramp') {
+        if (dx < 2.0 && heightAbove < 0.9) {
+          item.hit = true;
+          atv.vy = 14.5;
+          atv.y = itemGroundY + 0.35;
+          atv.onGround = false;
+          atv.trickDone = false;
+          atv.tricks += 1;
+          atv.bonusScore += 40;
+          callbacks.playJump();
+          callbacks.showBanner('Dune Ramp! +40 🚀');
+          emitSand(item.x, itemGroundY + 0.2, item.z, 12, '#ffd166');
+        }
+      } else if (item.type === 'boost') {
+        if (dx < 2.2 && heightAbove < 1.5) {
+          item.hit = true;
+          atv.boostTimer = 2.2;
+          atv.bonusScore += 25;
+          callbacks.playBoost();
+          callbacks.showBanner('Turbo Boost! ⚡');
+          emitSand(item.x, itemGroundY + 0.3, item.z, 12, '#ff9f1c');
+        }
+      } else if (item.type === 'cactus' || item.type === 'rock' || item.type === 'palm') {
+        const hitRadius = 1.1;
+        const clearHeight = item.type === 'rock' ? 1.3 : 2.5;
+        if (dx < hitRadius && heightAbove < clearHeight && atv.invulnTimer <= 0) {
+          item.hit = true;
+          atv.hearts -= 1;
+          atv.invulnTimer = 1.6;
+          atv.vz = 11;
+          callbacks.playBonk();
+          emitSand(atv.x, atv.y + 0.5, nextWorldZ, 16, '#ff6b6b');
+
+          if (atv.hearts <= 0) {
+            callbacks.triggerGameOver();
+            return;
+          }
+          callbacks.showBanner('Bonk! Watch out! ❤️');
+        }
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vy -= 14 * dt;
+      p.life -= dt;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    items = items.filter((it) => !it.hit && it.z > atv.z + 0.5);
+    tracks = tracks.filter((tr) => tr.z > atv.z + 0.5);
+    spawnAhead(atv.z + FAR_Z);
+
+    atv.distance = Math.floor(atv.z * 2);
+  }
+
+  function render(ctx, width, height, time) {
+    const horizonY = height * 0.28;
+
+    // Warm Desert Sky
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY + 80);
+    skyGrad.addColorStop(0, '#4ea8de');
+    skyGrad.addColorStop(0.6, '#90e0ef');
+    skyGrad.addColorStop(1, '#ffe5b4');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Sun
+    const sunX = width * 0.8;
+    const sunY = horizonY * 0.45;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 12, sunX, sunY, 95);
+    sunGlow.addColorStop(0, 'rgba(255, 245, 190, 0.95)');
+    sunGlow.addColorStop(1, 'rgba(255, 210, 110, 0)');
+    ctx.fillStyle = sunGlow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 95, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3D Sand Dune Terrain Mesh (far-to-near)
+    const dz = 3.0;
+    const dx = 6.0;
+    const zStart = Math.floor(atv.z / dz) * dz;
+    const xMin = Math.floor((atv.camX - 66) / dx) * dx;
+    const xMax = Math.ceil((atv.camX + 66) / dx) * dx;
+
+    for (let z = zStart + FAR_Z; z >= zStart + NEAR_Z; z -= dz) {
+      const zFar = z + dz;
+      const zNear = z;
+
+      for (let x = xMin; x < xMax; x += dx) {
+        const y00 = getDuneY(x, zNear);
+        const y10 = getDuneY(x + dx, zNear);
+        const y01 = getDuneY(x, zFar);
+        const y11 = getDuneY(x + dx, zFar);
+
+        const p00 = project(x, y00, zNear, width, height);
+        const p10 = project(x + dx, y10, zNear, width, height);
+        const p01 = project(x, y01, zFar, width, height);
+        const p11 = project(x + dx, y11, zFar, width, height);
+
+        if (!p00 || !p10 || !p01 || !p11) continue;
+        if (p10.x < -40 || p00.x > width + 40) continue;
+
+        const slopeFwd = ((y01 + y11) - (y00 + y10)) * 0.5 / dz;
+        const slopeSide = ((y10 + y11) - (y00 + y01)) * 0.5 / dx;
+        const light = Math.max(0, Math.min(1, 0.65 - slopeFwd * 0.45 + slopeSide * 0.25));
+        const r = Math.round(218 + light * 37);
+        const g = Math.round(145 + light * 70);
+        const b = Math.round(70 + light * 55);
+
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.moveTo(p00.x, p00.y);
+        ctx.lineTo(p10.x, p10.y);
+        ctx.lineTo(p11.x, p11.y);
+        ctx.lineTo(p01.x, p01.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Tire Tracks
+    ctx.strokeStyle = 'rgba(175, 108, 45, 0.5)';
+    ctx.lineWidth = 3;
+    for (let i = 1; i < tracks.length; i++) {
+      const a = project(tracks[i - 1].x, tracks[i - 1].y, tracks[i - 1].z, width, height);
+      const b = project(tracks[i].x, tracks[i].y, tracks[i].z, width, height);
+      if (!a || !b) continue;
+      const oA = 10 * a.persp;
+      const oB = 10 * b.persp;
+      ctx.beginPath();
+      ctx.moveTo(a.x - oA, a.y);
+      ctx.lineTo(b.x - oB, b.y);
+      ctx.moveTo(a.x + oA, a.y);
+      ctx.lineTo(b.x + oB, b.y);
+      ctx.stroke();
+    }
+
+    // Finish Line Banner if in view
+    if (RACE_FINISH_Z - atv.z > 1 && RACE_FINISH_Z - atv.z < FAR_Z) {
+      const fL = project(atv.camX - 18, getDuneY(atv.camX - 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
+      const fR = project(atv.camX + 18, getDuneY(atv.camX + 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
+      if (fL && fR) {
+        ctx.strokeStyle = '#ff5400';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(fL.x, fL.y);
+        ctx.lineTo(fL.x, fL.y - 70 * fL.persp);
+        ctx.lineTo(fR.x, fR.y - 70 * fR.persp);
+        ctx.lineTo(fR.x, fR.y);
+        ctx.stroke();
+      }
+    }
+
+    // Depth-sort items + rivals + player
+    const drawList = [];
+    for (const item of items) {
+      const wy = getDuneY(item.x, item.z) + item.yOffset;
+      const p = project(item.x, wy, item.z, width, height);
+      if (p) drawList.push({ kind: 'item', item, p });
+    }
+    for (const r of rivals) {
+      const p = project(r.x, r.y, r.z, width, height);
+      if (p) drawList.push({ kind: 'rival', r, p });
+    }
+    const playerWorldZ = atv.z + PLAYER_Z_OFFSET;
+    const playerGroundY = getDuneY(atv.x, playerWorldZ);
+    const playerProj = project(atv.x, atv.y, playerWorldZ, width, height);
+    const playerShadow = project(atv.x, playerGroundY, playerWorldZ, width, height);
+    if (playerProj) {
+      drawList.push({ kind: 'player', p: playerProj, shadowP: playerShadow, h: Math.max(0, atv.y - playerGroundY) });
+    }
+
+    drawList.sort((a, b) => b.p.relZ - a.p.relZ);
+
+    for (const entry of drawList) {
+      if (entry.kind === 'item') drawItem(ctx, entry.item, entry.p, time);
+      else if (entry.kind === 'rival') drawATV3D(ctx, entry.p, null, 0, entry.r.color, entry.r.helmet, 0, 0, false, time);
+      else drawATV3D(ctx, entry.p, entry.shadowP, entry.h, atv.boostTimer > 0 ? '#ff006e' : '#ff9f1c', '#ff5400', atv.lean, atv.spinAngle, true, time);
+    }
+
+    // Sand Particles
+    for (const pt of particles) {
+      const p = project(pt.x, pt.y, pt.z, width, height);
+      if (!p) continue;
+      ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+      ctx.fillStyle = pt.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, pt.size * p.persp, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Race Position Pill in top-center
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.roundRect(width * 0.5 - 66, 14, 132, 34, 17);
+    ctx.fill();
+    ctx.fillStyle = '#2b1608';
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    const placeTxt = atv.place === 1 ? '1st' : atv.place === 2 ? '2nd' : atv.place === 3 ? '3rd' : '4th';
+    ctx.fillText(`🏆 ${placeTxt} / 4`, width * 0.5, 36);
+    ctx.restore();
+  }
+
+  function drawItem(ctx, item, p, time) {
+    const s = p.persp * 1.35 * (item.pulse || 1);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    if (item.type === 'cactus') {
+      ctx.fillStyle = '#4ea854';
+      ctx.beginPath();
+      ctx.roundRect(-7 * s, -54 * s, 14 * s, 56 * s, 7 * s);
+      ctx.roundRect(-22 * s, -40 * s, 18 * s, 10 * s, 5 * s);
+      ctx.roundRect(-22 * s, -52 * s, 10 * s, 18 * s, 5 * s);
+      ctx.roundRect(4 * s, -32 * s, 18 * s, 10 * s, 5 * s);
+      ctx.roundRect(12 * s, -46 * s, 10 * s, 20 * s, 5 * s);
+      ctx.fill();
+    } else if (item.type === 'rock') {
+      ctx.fillStyle = '#b07d4f';
+      ctx.beginPath();
+      ctx.moveTo(-22 * s, 0);
+      ctx.lineTo(-12 * s, -22 * s);
+      ctx.lineTo(8 * s, -25 * s);
+      ctx.lineTo(22 * s, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else if (item.type === 'palm') {
+      ctx.strokeStyle = '#9c6644';
+      ctx.lineWidth = Math.max(2, 8 * s);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(8 * s, -38 * s, 2 * s, -72 * s);
+      ctx.stroke();
+
+      ctx.fillStyle = '#52b788';
+      for (let a = -2; a <= 2; a++) {
+        ctx.save();
+        ctx.translate(2 * s, -72 * s);
+        ctx.rotate(a * 0.55);
+        ctx.beginPath();
+        ctx.ellipse(18 * s, 0, 20 * s, 6 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    } else if (item.type === 'ramp') {
+      const rs = p.persp * 1.4;
+      ctx.fillStyle = '#ff5400';
+      ctx.beginPath();
+      ctx.moveTo(-34 * rs, 0);
+      ctx.lineTo(-28 * rs, -24 * rs);
+      ctx.lineTo(28 * rs, -24 * rs);
+      ctx.lineTo(34 * rs, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(-26 * rs, -24 * rs, 52 * rs, 6 * rs);
+    } else if (item.type === 'boost') {
+      const bs = p.persp * 1.4;
+      ctx.fillStyle = '#00bbf9';
+      ctx.beginPath();
+      ctx.roundRect(-26 * bs, -6 * bs, 52 * bs, 8 * bs, 4 * bs);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(10, Math.round(16 * bs))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('⚡⚡', 0, -10 * bs);
+    } else if (item.type === 'star') {
+      const ss = p.persp * 1.25;
+      const bob = Math.sin(time * 5 + item.pulse) * 6 * ss;
+      ctx.translate(0, -18 * ss + bob);
+
+      ctx.fillStyle = 'rgba(255, 214, 70, 0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 22 * ss, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffd166';
+      ctx.strokeStyle = '#f77f00';
+      ctx.lineWidth = Math.max(1.5, 2 * ss);
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = (i % 2 === 0 ? 15 : 7) * ss;
+        const a = (i * Math.PI) / 5 - Math.PI / 2;
+        if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawATV3D(ctx, p, shadowP, heightAbove, bodyColor, helmetColor, lean, spinAngle, isPlayer, time) {
+    if (isPlayer && atv.invulnTimer > 0 && Math.floor(atv.invulnTimer * 12) % 2 === 0) {
+      return;
+    }
+
+    const s = p.persp * 1.45;
+    if (shadowP) {
+      ctx.fillStyle = 'rgba(130, 80, 30, 0.32)';
+      const shadowScale = Math.max(0.45, 1 - heightAbove * 0.12);
+      ctx.beginPath();
+      ctx.ellipse(shadowP.x, shadowP.y, 28 * s * shadowScale, 9 * s * shadowScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(lean + spinAngle);
+
+    const bounce = Math.sin(time * 22) * 1.1 * s;
+
+    // Rear Chunky Tires
+    ctx.fillStyle = '#2b2d42';
+    ctx.beginPath();
+    ctx.roundRect(-24 * s, -16 * s, 12 * s, 18 * s, 4 * s);
+    ctx.roundRect(12 * s, -16 * s, 12 * s, 18 * s, 4 * s);
+    ctx.fill();
+
+    // ATV Rear Chassis
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.roundRect(-17 * s, -28 * s + bounce, 34 * s, 18 * s, 7 * s);
+    ctx.fill();
+
+    // Tail Lights
+    ctx.fillStyle = '#ff0033';
+    ctx.beginPath();
+    ctx.arc(-11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
+    ctx.arc(11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rider Torso
+    ctx.fillStyle = '#48cae4';
+    ctx.beginPath();
+    ctx.roundRect(-11 * s, -44 * s + bounce, 22 * s, 20 * s, 7 * s);
+    ctx.fill();
+
+    // Scarf (for player)
+    if (isPlayer) {
+      ctx.strokeStyle = '#ff4d6d';
+      ctx.lineWidth = Math.max(3, 5 * s);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -43 * s + bounce);
+      ctx.quadraticCurveTo(
+        Math.sin(atv.scarfPhase) * 14 * s,
+        -52 * s + bounce,
+        Math.cos(atv.scarfPhase * 1.3) * 18 * s,
+        -58 * s + bounce
+      );
+      ctx.stroke();
+    }
+
+    // Helmet
+    ctx.fillStyle = helmetColor;
+    ctx.beginPath();
+    ctx.arc(0, -52 * s + bounce, 10 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  window.AtvRaceMode = {
+    reset,
+    update,
+    render,
+    getStats() {
+      return {
+        stars: atv.stars,
+        distance: atv.distance,
+        hearts: atv.hearts,
+        tricks: atv.tricks,
+        score: atv.distance + atv.bonusScore,
+      };
+    },
+  };
+})();

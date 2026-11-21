@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Khusi's Dune Dash — Sand Dune ATV</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div class="hud-pill">
+          <span class="icon">⭐</span>
+          <span id="stars-count">0</span>
+        </div>
+        <div class="hud-pill">
+          <span class="icon">🏁</span>
+          <span id="distance-count">0m</span>
+        </div>
+        <div class="hud-pill hearts" id="hearts-display" title="Hearts">❤️❤️❤️</div>
+      </div>
+      <div class="hud-right">
+        <div class="hud-pill score-pill">
+          Score: <strong id="score-count">0</strong>
+        </div>
+        <button id="mute-btn" class="icon-btn" title="Toggle Sound" aria-label="Toggle Sound">🔊</button>
+        <button id="pause-btn" class="icon-btn" title="Pause" aria-label="Pause">⏸️</button>
+      </div>
+    </div>
+
+    <!-- Trick / Floating Banner -->
+    <div id="trick-banner" class="hidden"></div>
+
+    <!-- Touch / On-screen Controls (ATV) -->
+    <div id="touch-controls" class="hidden">
+      <div class="touch-left">
+        <button id="btn-tilt-back" class="ctrl-btn" aria-label="Steer Left">⬅️<br><small>Left</small></button>
+        <button id="btn-tilt-fwd" class="ctrl-btn" aria-label="Steer Right">➡️<br><small>Right</small></button>
+      </div>
+      <div class="touch-right">
+        <button id="btn-jump" class="ctrl-btn jump-btn" aria-label="Hop">⬆️<br><small>Hop</small></button>
+        <button id="btn-gas" class="ctrl-btn gas-btn" aria-label="Gas">⚡<br><small>Gas</small></button>
+      </div>
+    </div>
+
+    <!-- Touch / On-screen Controls (Ski) -->
+    <div id="touch-controls-ski" class="hidden">
+      <div class="touch-left">
+        <button id="btn-ski-left" class="ctrl-btn" aria-label="Carve Left">⬅️<br><small>Left</small></button>
+        <button id="btn-ski-right" class="ctrl-btn" aria-label="Carve Right">➡️<br><small>Right</small></button>
+      </div>
+      <div class="touch-right">
+        <button id="btn-ski-jump" class="ctrl-btn jump-btn" aria-label="Jump">⬆️<br><small>Jump</small></button>
+        <button id="btn-ski-tuck" class="ctrl-btn ski-tuck-btn" aria-label="Tuck Fast">⚡<br><small>Tuck</small></button>
+      </div>
+    </div>
+
+    <!-- Start / Title Screen -->
+    <div id="start-screen" class="overlay">
+      <div class="card">
+        <div class="badge">Desert &amp; Alpine Adventure</div>
+        <h1>🏔️ Khusi's Dune &amp; Slope Dash</h1>
+        <p class="subtitle">Pick your ride: zoom over golden sand dunes or carve freeform down snowy ski slopes!</p>
+
+        <div class="mode-grid">
+          <button id="start-atv-btn" class="mode-card active-mode">
+            <span class="mode-emoji">🛞</span>
+            <span class="mode-title">Sand Dune ATV</span>
+            <span class="mode-desc">Zoom &amp; flip across sunny dunes</span>
+            <span class="mode-cta">Play ATV!</span>
+          </button>
+          <button id="start-ski-btn" class="mode-card active-mode ski-mode">
+            <span class="mode-emoji">⛷️</span>
+            <span class="mode-title">Ski Slopes</span>
+            <span class="mode-desc">Freeform downhill carving ahead</span>
+            <span class="mode-cta ski-cta">Play Ski!</span>
+          </button>
+        </div>
+
+        <div class="controls-help">
+          <span><strong>Steer Left / Right:</strong> ← / → or A / D</span>
+          <span><strong>Gas / Tuck:</strong> ↑ or W</span>
+          <span><strong>Brake:</strong> ↓ or S</span>
+          <span><strong>Jump &amp; 360° Spin:</strong> Space</span>
+        </div>
+
+        <div class="best-score" id="best-score-display">Best Score: 0</div>
+      </div>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="pause-screen" class="overlay hidden">
+      <div class="card compact">
+        <h2>⏸️ Paused</h2>
+        <p>Take a breather in the shade!</p>
+        <div class="btn-row">
+          <button id="resume-btn" class="primary-btn">Resume</button>
+          <button id="restart-pause-btn" class="secondary-btn">Restart</button>
+          <button id="menu-pause-btn" class="secondary-btn">Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="overlay hidden">
+      <div class="card compact">
+        <h2>🌟 Great Ride!</h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="final-score">0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Distance</span>
+            <span class="stat-value" id="final-distance">0m</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Stars</span>
+            <span class="stat-value" id="final-stars">0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label" id="final-tricks-label">Flips</span>
+            <span class="stat-value" id="final-flips">0</span>
+          </div>
+        </div>
+        <div class="best-score" id="gameover-best">Best Score: 0</div>
+        <div class="btn-row">
+          <button id="play-again-btn" class="primary-btn">Play Again! 🛞</button>
+          <button id="menu-gameover-btn" class="secondary-btn">Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="atv.js"></script>
+  <script src="ski.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
