@@ -151,8 +151,9 @@
       for (let i = 0; i < obstacleCount; i++) {
         const ox = center + (Math.random() - 0.5) * 58;
         if (z < 24 && Math.abs(ox) < 3.5) continue;
+        const tRoll = Math.random();
         items.push({
-          type: Math.random() < 0.76 ? 'tree' : 'rock',
+          type: tRoll < 0.6 ? 'tree' : tRoll < 0.82 ? 'bush' : 'rock',
           x: ox,
           z: z + Math.random() * 3,
           yOffset: 0,
@@ -339,7 +340,7 @@
           callbacks.showBanner('Powder Boost! ⚡');
           emitSnow(item.x, itemGroundY + 0.3, item.z, 12, '#48cae4');
         }
-      } else if (item.type === 'tree' || item.type === 'rock') {
+      } else if (item.type === 'tree' || item.type === 'rock' || item.type === 'bush') {
         const hitRadius = item.type === 'tree' ? 1.1 : 1.0;
         const clearHeight = item.type === 'rock' ? 1.3 : 2.6;
         if (dx < hitRadius && heightAboveSnow < clearHeight && ski.invulnTimer <= 0) {
@@ -455,13 +456,14 @@
         if (!p00 || !p10 || !p01 || !p11) continue;
         if (p10.x < -40 || p00.x > width + 40) continue;
 
-        // Shade snow quad by slope steepness & sun direction
+        // Shade snow quad by slope steepness, sun direction & alpine distance mist
         const slopeFwd = ((y01 + y11) - (y00 + y10)) * 0.5 / dz;
         const slopeSide = ((y10 + y11) - (y00 + y01)) * 0.5 / dx;
-        const light = Math.max(0, Math.min(1, 0.72 - slopeFwd * 0.45 + slopeSide * 0.25));
-        const r = Math.round(205 + light * 50);
-        const g = Math.round(228 + light * 27);
-        const b = Math.round(246 + light * 9);
+        const light = Math.max(0, Math.min(1, 0.7 - slopeFwd * 0.48 + slopeSide * 0.28));
+        const fog = Math.max(0, Math.min(0.75, (zNear - ski.z - 22) / (FAR_Z - 22) * 0.75));
+        const r = Math.round((200 + light * 55) * (1 - fog) + 228 * fog);
+        const g = Math.round((224 + light * 31) * (1 - fog) + 244 * fog);
+        const b = Math.round((245 + light * 10) * (1 - fog) + 252 * fog);
 
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath();
@@ -472,9 +474,9 @@
         ctx.closePath();
         ctx.fill();
 
-        // Subtle snow contour line every 2nd strip
-        if (Math.round(z / dz) % 2 === 0) {
-          ctx.strokeStyle = 'rgba(170, 210, 238, 0.28)';
+        // Subtle wind-swept snow line on near terrain
+        if (zNear - ski.z < 26 && Math.round(z / dz) % 2 === 0) {
+          ctx.strokeStyle = `rgba(175, 212, 238, ${0.22 * (1 - (zNear - ski.z) / 26)})`;
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(p00.x, p00.y);
@@ -553,43 +555,78 @@
     ctx.translate(p.x, p.y);
 
     if (item.type === 'tree') {
-      ctx.fillStyle = 'rgba(110, 150, 185, 0.34)';
+      ctx.fillStyle = 'rgba(100, 140, 175, 0.32)';
       ctx.beginPath();
-      ctx.ellipse(0, 0, 26 * s, 8 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(2 * s, 1 * s, 28 * s, 8 * s, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#6d4c41';
-      ctx.fillRect(-5 * s, -16 * s, 10 * s, 18 * s);
+      // Textured Bark Trunk
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(-5 * s, -18 * s, 10 * s, 20 * s);
+      ctx.fillStyle = '#4a3228';
+      ctx.fillRect(0, -18 * s, 5 * s, 20 * s);
 
+      // Layered Scalloped Pine Boughs with Snow
       const layers = [
-        { y: -14, w: 32, h: 36, c: '#2d6a4f' },
-        { y: -36, w: 25, h: 32, c: '#40916c' },
-        { y: -56, w: 17, h: 26, c: '#52b788' },
+        { y: -14, w: 34, h: 36, c: '#1b4332', c2: '#2d6a4f' },
+        { y: -35, w: 27, h: 32, c: '#2d6a4f', c2: '#40916c' },
+        { y: -54, w: 19, h: 27, c: '#40916c', c2: '#52b788' },
       ];
       for (const l of layers) {
+        // Dark under-bough
         ctx.fillStyle = l.c;
         ctx.beginPath();
         ctx.moveTo(-l.w * s, l.y * s);
-        ctx.lineTo(0, (l.y - l.h) * s);
-        ctx.lineTo(l.w * s, l.y * s);
+        ctx.quadraticCurveTo(-l.w * 0.4 * s, (l.y - l.h * 0.4) * s, 0, (l.y - l.h) * s);
+        ctx.quadraticCurveTo(l.w * 0.4 * s, (l.y - l.h * 0.4) * s, l.w * s, l.y * s);
+        ctx.quadraticCurveTo(0, (l.y + 6) * s, -l.w * s, l.y * s);
+        ctx.fill();
+
+        // Sunlit left foliage
+        ctx.fillStyle = l.c2;
+        ctx.beginPath();
+        ctx.moveTo(-l.w * s, l.y * s);
+        ctx.quadraticCurveTo(-l.w * 0.4 * s, (l.y - l.h * 0.4) * s, 0, (l.y - l.h) * s);
+        ctx.lineTo(0, (l.y + 3) * s);
         ctx.closePath();
         ctx.fill();
 
-        ctx.fillStyle = '#ffffff';
+        // Draped snow on boughs
+        ctx.fillStyle = '#f8fdff';
         ctx.beginPath();
-        ctx.moveTo(-l.w * 0.35 * s, (l.y - l.h * 0.65) * s);
-        ctx.lineTo(0, (l.y - l.h) * s);
-        ctx.lineTo(l.w * 0.35 * s, (l.y - l.h * 0.65) * s);
-        ctx.closePath();
+        ctx.moveTo(-l.w * 0.55 * s, (l.y - l.h * 0.48) * s);
+        ctx.quadraticCurveTo(-l.w * 0.25 * s, (l.y - l.h * 0.72) * s, 0, (l.y - l.h) * s);
+        ctx.quadraticCurveTo(l.w * 0.25 * s, (l.y - l.h * 0.72) * s, l.w * 0.52 * s, (l.y - l.h * 0.46) * s);
+        ctx.quadraticCurveTo(l.w * 0.18 * s, (l.y - l.h * 0.38) * s, 0, (l.y - l.h * 0.52) * s);
+        ctx.quadraticCurveTo(-l.w * 0.2 * s, (l.y - l.h * 0.36) * s, -l.w * 0.55 * s, (l.y - l.h * 0.48) * s);
+        ctx.fill();
+      }
+    } else if (item.type === 'bush') {
+      ctx.fillStyle = 'rgba(100, 140, 175, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(0, 1 * s, 22 * s, 6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const puffs = [
+        { x: -11, y: -8, r: 10, c: '#2d6a4f' },
+        { x: 11, y: -7, r: 9, c: '#1b4332' },
+        { x: 0, y: -12, r: 12, c: '#40916c' },
+        { x: -3, y: -18, r: 7, c: '#f8fdff' },
+        { x: 5, y: -15, r: 6, c: '#eef7fc' },
+      ];
+      for (const pf of puffs) {
+        ctx.fillStyle = pf.c;
+        ctx.beginPath();
+        ctx.arc(pf.x * s, pf.y * s, pf.r * s, 0, Math.PI * 2);
         ctx.fill();
       }
     } else if (item.type === 'rock') {
-      ctx.fillStyle = 'rgba(110, 150, 185, 0.3)';
+      ctx.fillStyle = 'rgba(100, 140, 175, 0.3)';
       ctx.beginPath();
-      ctx.ellipse(0, 0, 24 * s, 7 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(2 * s, 1 * s, 24 * s, 7 * s, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#78909c';
+      ctx.fillStyle = '#5c707d';
       ctx.beginPath();
       ctx.moveTo(-22 * s, 0);
       ctx.lineTo(-12 * s, -22 * s);
@@ -598,7 +635,16 @@
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = '#eceff1';
+      ctx.fillStyle = '#78909c';
+      ctx.beginPath();
+      ctx.moveTo(-22 * s, 0);
+      ctx.lineTo(-12 * s, -22 * s);
+      ctx.lineTo(2 * s, -15 * s);
+      ctx.lineTo(-2 * s, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#f5fbff';
       ctx.beginPath();
       ctx.moveTo(-12 * s, -22 * s);
       ctx.lineTo(8 * s, -26 * s);
@@ -678,27 +724,59 @@
     ctx.translate(p.x, p.y);
     ctx.rotate(ski.lean + ski.spinAngle);
 
-    // Twin Skis
-    ctx.fillStyle = ski.boostTimer > 0 ? '#ff006e' : '#ff5400';
-    ctx.beginPath();
-    ctx.roundRect(-16 * s, -6 * s, 9 * s, 26 * s, 4 * s);
-    ctx.roundRect(7 * s, -6 * s, 9 * s, 26 * s, 4 * s);
-    ctx.fill();
+    // Carved Parabolic Skis with metallic edges & upturned tips
+    const skiCol = ski.boostTimer > 0 ? '#ff006e' : '#e63946';
+    for (const side of [-1, 1]) {
+      const sx = side * 11 * s;
+      ctx.fillStyle = '#ced4da';
+      ctx.beginPath();
+      ctx.roundRect(sx - 4.5 * s, -10 * s, 9 * s, 30 * s, 4 * s);
+      ctx.fill();
+      ctx.fillStyle = skiCol;
+      ctx.beginPath();
+      ctx.roundRect(sx - 3.5 * s, -9 * s, 7 * s, 28 * s, 3.5 * s);
+      ctx.fill();
+      // Ski Boot & Binding
+      ctx.fillStyle = '#1d3557';
+      ctx.beginPath();
+      ctx.roundRect(sx - 4 * s, -5 * s, 8 * s, 11 * s, 2.5 * s);
+      ctx.fill();
+    }
 
-    // Ski poles
-    ctx.strokeStyle = '#2b2d42';
-    ctx.lineWidth = Math.max(2, 2.5 * s);
+    // Ski Legs (bent knees)
+    ctx.strokeStyle = '#1d3557';
+    ctx.lineWidth = Math.max(3, 7 * s);
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-16 * s, -26 * s);
-    ctx.lineTo(-24 * s, -4 * s);
-    ctx.moveTo(16 * s, -26 * s);
-    ctx.lineTo(24 * s, -4 * s);
+    ctx.moveTo(-11 * s, -3 * s);
+    ctx.lineTo(-9 * s, -16 * s);
+    ctx.moveTo(11 * s, -3 * s);
+    ctx.lineTo(9 * s, -16 * s);
     ctx.stroke();
 
-    // Jacket / Torso
+    // Tapered Ski Poles with Snow Baskets
+    ctx.strokeStyle = '#495057';
+    ctx.lineWidth = Math.max(2, 2.2 * s);
+    ctx.beginPath();
+    ctx.moveTo(-15 * s, -27 * s);
+    ctx.lineTo(-24 * s, -3 * s);
+    ctx.moveTo(15 * s, -27 * s);
+    ctx.lineTo(24 * s, -3 * s);
+    ctx.stroke();
+    ctx.fillStyle = '#2b2d42';
+    ctx.beginPath();
+    ctx.arc(-23 * s, -5 * s, 3 * s, 0, Math.PI * 2);
+    ctx.arc(23 * s, -5 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Puffy Ski Jacket (shaded)
     ctx.fillStyle = '#ff4d6d';
     ctx.beginPath();
-    ctx.roundRect(-13 * s, -38 * s, 26 * s, 28 * s, 9 * s);
+    ctx.roundRect(-12 * s, -39 * s, 24 * s, 24 * s, 8 * s);
+    ctx.fill();
+    ctx.fillStyle = '#e03152';
+    ctx.beginPath();
+    ctx.roundRect(0, -39 * s, 12 * s, 24 * s, [0, 8 * s, 8 * s, 0]);
     ctx.fill();
 
     // Flowing Scarf
@@ -706,24 +784,22 @@
     ctx.lineWidth = Math.max(3, 5 * s);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(0, -37 * s);
+    ctx.moveTo(0, -38 * s);
     ctx.quadraticCurveTo(
       Math.sin(ski.scarfPhase) * 14 * s,
-      -46 * s,
+      -47 * s,
       Math.cos(ski.scarfPhase * 1.3) * 18 * s,
-      -52 * s
+      -53 * s
     );
     ctx.stroke();
 
-    // Helmet
-    ctx.fillStyle = '#00b4d8';
+    // Helmet & Goggles
+    ctx.fillStyle = '#0096c7';
     ctx.beginPath();
-    ctx.arc(0, -47 * s, 11 * s, 0, Math.PI * 2);
+    ctx.arc(0, -47 * s, 10.5 * s, 0, Math.PI * 2);
     ctx.fill();
-
-    // Goggles strap
     ctx.fillStyle = '#023e8a';
-    ctx.fillRect(-10 * s, -49 * s, 20 * s, 4 * s);
+    ctx.fillRect(-9.5 * s, -49 * s, 19 * s, 4 * s);
 
     ctx.restore();
   }

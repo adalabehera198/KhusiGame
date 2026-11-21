@@ -138,7 +138,7 @@
         const ox = center + (Math.random() - 0.5) * 60;
         if (z < 24 && Math.abs(ox) < 4) continue;
         const tRoll = Math.random();
-        const type = tRoll < 0.48 ? 'cactus' : tRoll < 0.8 ? 'rock' : 'palm';
+        const type = tRoll < 0.36 ? 'cactus' : tRoll < 0.62 ? 'bush' : tRoll < 0.84 ? 'rock' : 'palm';
         items.push({
           type,
           x: ox,
@@ -342,7 +342,7 @@
           callbacks.showBanner('Turbo Boost! ⚡');
           emitSand(item.x, itemGroundY + 0.3, item.z, 12, '#ff9f1c');
         }
-      } else if (item.type === 'cactus' || item.type === 'rock' || item.type === 'palm') {
+      } else if (item.type === 'cactus' || item.type === 'rock' || item.type === 'palm' || item.type === 'bush') {
         const hitRadius = 1.1;
         const clearHeight = item.type === 'rock' ? 1.3 : 2.5;
         if (dx < hitRadius && heightAbove < clearHeight && atv.invulnTimer <= 0) {
@@ -429,9 +429,10 @@
         const slopeFwd = ((y01 + y11) - (y00 + y10)) * 0.5 / dz;
         const slopeSide = ((y10 + y11) - (y00 + y01)) * 0.5 / dx;
         const light = Math.max(0, Math.min(1, 0.55 - slopeFwd * 0.55 + slopeSide * 0.45));
-        const r = Math.round(188 + light * 67);
-        const g = Math.round(110 + light * 108);
-        const b = Math.round(45 + light * 80);
+        const fog = Math.max(0, Math.min(0.75, (zNear - atv.z - 22) / (FAR_Z - 22) * 0.75));
+        const r = Math.round((188 + light * 67) * (1 - fog) + 248 * fog);
+        const g = Math.round((110 + light * 108) * (1 - fog) + 216 * fog);
+        const b = Math.round((45 + light * 80) * (1 - fog) + 170 * fog);
 
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath();
@@ -441,6 +442,16 @@
         ctx.lineTo(p01.x, p01.y);
         ctx.closePath();
         ctx.fill();
+
+        // Wind-blown sand ripple lines on near dunes
+        if (zNear - atv.z < 28 && Math.abs(Math.round(z / dz)) % 2 === 0) {
+          ctx.strokeStyle = `rgba(165, 98, 42, ${0.14 * (1 - (zNear - atv.z) / 28)})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(p00.x, p00.y);
+          ctx.lineTo(p10.x, p10.y);
+          ctx.stroke();
+        }
       }
     }
 
@@ -518,7 +529,12 @@
     ctx.translate(p.x, p.y);
 
     if (item.type === 'cactus') {
-      ctx.fillStyle = '#4ea854';
+      ctx.fillStyle = 'rgba(110, 65, 25, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(3 * s, 1 * s, 14 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#38763d';
       ctx.beginPath();
       ctx.roundRect(-7 * s, -54 * s, 14 * s, 56 * s, 7 * s);
       ctx.roundRect(-22 * s, -40 * s, 18 * s, 10 * s, 5 * s);
@@ -526,8 +542,40 @@
       ctx.roundRect(4 * s, -32 * s, 18 * s, 10 * s, 5 * s);
       ctx.roundRect(12 * s, -46 * s, 10 * s, 20 * s, 5 * s);
       ctx.fill();
+
+      // Sunlit ribs
+      ctx.fillStyle = '#5da45e';
+      ctx.beginPath();
+      ctx.roundRect(-4 * s, -52 * s, 5 * s, 52 * s, 3 * s);
+      ctx.roundRect(-20 * s, -50 * s, 4 * s, 14 * s, 2 * s);
+      ctx.roundRect(14 * s, -44 * s, 4 * s, 16 * s, 2 * s);
+      ctx.fill();
+    } else if (item.type === 'bush') {
+      ctx.fillStyle = 'rgba(110, 65, 25, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(0, 1 * s, 22 * s, 6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const puffs = [
+        { x: -11, y: -8, r: 10, c: '#5c6b3c' },
+        { x: 11, y: -7, r: 9, c: '#4d5b32' },
+        { x: 0, y: -12, r: 12, c: '#6e7f48' },
+        { x: -4, y: -15, r: 8, c: '#86985b' },
+      ];
+      for (const pf of puffs) {
+        ctx.fillStyle = pf.c;
+        ctx.beginPath();
+        ctx.arc(pf.x * s, pf.y * s, pf.r * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
     } else if (item.type === 'rock') {
-      ctx.fillStyle = '#b07d4f';
+      ctx.fillStyle = 'rgba(110, 65, 25, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(2 * s, 1 * s, 24 * s, 6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shaded base
+      ctx.fillStyle = '#8b5e3c';
       ctx.beginPath();
       ctx.moveTo(-22 * s, 0);
       ctx.lineTo(-12 * s, -22 * s);
@@ -535,22 +583,40 @@
       ctx.lineTo(22 * s, 0);
       ctx.closePath();
       ctx.fill();
+
+      // Sunlit facet
+      ctx.fillStyle = '#b9865c';
+      ctx.beginPath();
+      ctx.moveTo(-22 * s, 0);
+      ctx.lineTo(-12 * s, -22 * s);
+      ctx.lineTo(3 * s, -15 * s);
+      ctx.lineTo(-2 * s, 0);
+      ctx.closePath();
+      ctx.fill();
     } else if (item.type === 'palm') {
-      ctx.strokeStyle = '#9c6644';
+      ctx.fillStyle = 'rgba(110, 65, 25, 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(6 * s, 1 * s, 24 * s, 6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#7f5539';
       ctx.lineWidth = Math.max(2, 8 * s);
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.quadraticCurveTo(8 * s, -38 * s, 2 * s, -72 * s);
+      ctx.quadraticCurveTo(9 * s, -38 * s, 2 * s, -72 * s);
       ctx.stroke();
 
-      ctx.fillStyle = '#52b788';
       for (let a = -2; a <= 2; a++) {
         ctx.save();
         ctx.translate(2 * s, -72 * s);
-        ctx.rotate(a * 0.55);
+        ctx.rotate(a * 0.58);
+        ctx.fillStyle = a % 2 === 0 ? '#40916c' : '#2d6a4f';
         ctx.beginPath();
-        ctx.ellipse(18 * s, 0, 20 * s, 6 * s, 0, 0, Math.PI * 2);
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(16 * s, -10 * s, 32 * s, 4 * s);
+        ctx.quadraticCurveTo(15 * s, 2 * s, 0, 2 * s);
+        ctx.closePath();
         ctx.fill();
         ctx.restore();
       }
@@ -624,26 +690,68 @@
 
     const bounce = Math.sin(time * 22) * 1.1 * s;
 
-    ctx.fillStyle = '#2b2d42';
+    // Wide Knobby Off-Road Tires with Tread & Rims
+    for (const side of [-1, 1]) {
+      const tx = side * 21 * s;
+      ctx.fillStyle = '#1d1e2c';
+      ctx.beginPath();
+      ctx.roundRect(tx - 7 * s, -19 * s, 14 * s, 20 * s, 4 * s);
+      ctx.fill();
+      // Tire tread ribs
+      ctx.fillStyle = '#33364d';
+      for (let t = -15; t <= -3; t += 4) {
+        ctx.fillRect(tx - 6 * s, t * s, 12 * s, 2 * s);
+      }
+    }
+
+    // Rear Suspension A-arms & Coil Shocks
+    ctx.strokeStyle = '#8d99ae';
+    ctx.lineWidth = Math.max(2, 3 * s);
     ctx.beginPath();
-    ctx.roundRect(-24 * s, -16 * s, 12 * s, 18 * s, 4 * s);
-    ctx.roundRect(12 * s, -16 * s, 12 * s, 18 * s, 4 * s);
+    ctx.moveTo(-19 * s, -10 * s);
+    ctx.lineTo(-9 * s, -16 * s + bounce);
+    ctx.moveTo(19 * s, -10 * s);
+    ctx.lineTo(9 * s, -16 * s + bounce);
+    ctx.stroke();
+
+    // Dual Exhaust Pipes
+    ctx.fillStyle = '#adb5bd';
+    ctx.beginPath();
+    ctx.roundRect(-13 * s, -14 * s + bounce, 5 * s, 6 * s, 2 * s);
+    ctx.roundRect(8 * s, -14 * s + bounce, 5 * s, 6 * s, 2 * s);
     ctx.fill();
 
+    // Buggy Rear Body & Fenders
     ctx.fillStyle = bodyColor;
     ctx.beginPath();
-    ctx.roundRect(-17 * s, -28 * s + bounce, 34 * s, 18 * s, 7 * s);
+    ctx.moveTo(-18 * s, -14 * s + bounce);
+    ctx.lineTo(-14 * s, -29 * s + bounce);
+    ctx.lineTo(14 * s, -29 * s + bounce);
+    ctx.lineTo(18 * s, -14 * s + bounce);
+    ctx.closePath();
     ctx.fill();
 
+    // Roll Cage Bars
+    ctx.strokeStyle = '#2b2d42';
+    ctx.lineWidth = Math.max(2, 3.2 * s);
+    ctx.beginPath();
+    ctx.moveTo(-13 * s, -28 * s + bounce);
+    ctx.lineTo(-9 * s, -48 * s + bounce);
+    ctx.lineTo(9 * s, -48 * s + bounce);
+    ctx.lineTo(13 * s, -28 * s + bounce);
+    ctx.stroke();
+
+    // Brake / Tail Lights
     ctx.fillStyle = '#ff0033';
     ctx.beginPath();
-    ctx.arc(-11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
-    ctx.arc(11 * s, -20 * s + bounce, 3 * s, 0, Math.PI * 2);
+    ctx.roundRect(-14 * s, -23 * s + bounce, 6 * s, 4 * s, 2 * s);
+    ctx.roundRect(8 * s, -23 * s + bounce, 6 * s, 4 * s, 2 * s);
     ctx.fill();
 
-    ctx.fillStyle = '#48cae4';
+    // Rider Torso & Arms
+    ctx.fillStyle = '#219ebc';
     ctx.beginPath();
-    ctx.roundRect(-11 * s, -44 * s + bounce, 22 * s, 20 * s, 7 * s);
+    ctx.roundRect(-9 * s, -45 * s + bounce, 18 * s, 18 * s, 6 * s);
     ctx.fill();
 
     if (isPlayer) {
@@ -651,20 +759,23 @@
       ctx.lineWidth = Math.max(3, 5 * s);
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(0, -43 * s + bounce);
+      ctx.moveTo(0, -44 * s + bounce);
       ctx.quadraticCurveTo(
         Math.sin(atv.scarfPhase) * 14 * s,
-        -52 * s + bounce,
+        -53 * s + bounce,
         Math.cos(atv.scarfPhase * 1.3) * 18 * s,
-        -58 * s + bounce
+        -59 * s + bounce
       );
       ctx.stroke();
     }
 
+    // Motocross Helmet & Goggles Strap
     ctx.fillStyle = helmetColor;
     ctx.beginPath();
-    ctx.arc(0, -52 * s + bounce, 10 * s, 0, Math.PI * 2);
+    ctx.arc(0, -52 * s + bounce, 9.5 * s, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#1d3557';
+    ctx.fillRect(-8 * s, -54 * s + bounce, 16 * s, 3.5 * s);
 
     ctx.restore();
   }
