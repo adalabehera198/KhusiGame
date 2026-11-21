@@ -50,9 +50,62 @@
   let bestScore = Number(localStorage.getItem(BEST_KEY) || 0);
   bestScoreDisplay.textContent = `Best Score: ${bestScore}`;
 
-  // Sound System (Web Audio API)
+  // Sound System (Web Audio API — Dramatic Engine, Wind/Carve & Layered SFX)
   let audioCtx = null;
   let isMuted = false;
+  let engineOsc = null;
+  let engineSubOsc = null;
+  let engineFilter = null;
+  let engineGain = null;
+  let windNode = null;
+  let windFilter = null;
+  let windGain = null;
+
+  function initContinuousAudio() {
+    if (!audioCtx || engineOsc) return;
+    const now = audioCtx.currentTime;
+
+    // ATV Engine (dual-oscillator growl through lowpass filter)
+    engineOsc = audioCtx.createOscillator();
+    engineSubOsc = audioCtx.createOscillator();
+    engineFilter = audioCtx.createBiquadFilter();
+    engineGain = audioCtx.createGain();
+    engineOsc.type = 'sawtooth';
+    engineSubOsc.type = 'triangle';
+    engineOsc.frequency.setValueAtTime(55, now);
+    engineSubOsc.frequency.setValueAtTime(27.5, now);
+    engineFilter.type = 'lowpass';
+    engineFilter.frequency.setValueAtTime(220, now);
+    engineGain.gain.setValueAtTime(0, now);
+
+    engineOsc.connect(engineFilter);
+    engineSubOsc.connect(engineFilter);
+    engineFilter.connect(engineGain);
+    engineGain.connect(audioCtx.destination);
+    engineOsc.start();
+    engineSubOsc.start();
+
+    // Ski Wind & Snow Carve (looping white noise through bandpass filter)
+    const bufLen = audioCtx.sampleRate * 2;
+    const noiseBuf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+    windNode = audioCtx.createBufferSource();
+    windNode.buffer = noiseBuf;
+    windNode.loop = true;
+    windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'bandpass';
+    windFilter.frequency.setValueAtTime(500, now);
+    windFilter.Q.setValueAtTime(0.8, now);
+    windGain = audioCtx.createGain();
+    windGain.gain.setValueAtTime(0, now);
+
+    windNode.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(audioCtx.destination);
+    windNode.start();
+  }
 
   function ensureAudio() {
     if (!audioCtx && !isMuted) {
@@ -62,9 +115,43 @@
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
     }
+    if (audioCtx && !isMuted) initContinuousAudio();
   }
 
-  function playTone(freq, duration, type = 'sine', gainVal = 0.12, slideTo = null) {
+  function silenceContinuousAudio() {
+    if (!audioCtx || !engineGain || !windGain) return;
+    const now = audioCtx.currentTime;
+    engineGain.gain.setTargetAtTime(0, now, 0.05);
+    windGain.gain.setTargetAtTime(0, now, 0.05);
+  }
+
+  function updateContinuousAudio(mode, stats) {
+    if (isMuted || !audioCtx || !engineGain || !windGain || state.mode !== 'playing') {
+      silenceContinuousAudio();
+      return;
+    }
+    const now = audioCtx.currentTime;
+    const spd = Math.min(42, Math.max(0, stats.speed || 0));
+    const speedNorm = spd / 38;
+
+    if (mode === 'atv') {
+      const baseFreq = 46 + speedNorm * 78 + (stats.boost ? 28 : 0) + (stats.onGround ? 0 : 18);
+      engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.06);
+      engineSubOsc.frequency.setTargetAtTime(baseFreq * 0.5, now, 0.06);
+      engineFilter.frequency.setTargetAtTime(180 + speedNorm * 420 + (stats.boost ? 260 : 0), now, 0.06);
+      engineGain.gain.setTargetAtTime(0.065 + speedNorm * 0.045, now, 0.08);
+      windGain.gain.setTargetAtTime(speedNorm * 0.03, now, 0.08);
+      windFilter.frequency.setTargetAtTime(400 + speedNorm * 600, now, 0.08);
+    } else {
+      engineGain.gain.setTargetAtTime(0, now, 0.05);
+      const carveBoost = Math.min(1, (stats.steer || 0) / 14);
+      const targetVol = 0.025 + speedNorm * 0.07 + (stats.onGround ? carveBoost * 0.06 : 0);
+      windGain.gain.setTargetAtTime(targetVol, now, 0.06);
+      windFilter.frequency.setTargetAtTime(350 + speedNorm * 900 + carveBoost * 500, now, 0.06);
+    }
+  }
+
+  function playTone(freq, duration, type = 'sine', gainVal = 0.14, slideTo = null) {
     if (isMuted || !audioCtx) return;
     const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
@@ -83,31 +170,40 @@
   }
 
   function playStarSound() {
-    playTone(660, 0.09, 'triangle', 0.14, 990);
-    setTimeout(() => playTone(990, 0.12, 'triangle', 0.12, 1320), 55);
+    playTone(740, 0.1, 'triangle', 0.16, 1108);
+    setTimeout(() => playTone(1108, 0.16, 'sine', 0.15, 1480), 50);
   }
 
   function playJumpSound() {
-    playTone(220, 0.18, 'sine', 0.14, 480);
+    playTone(170, 0.24, 'sawtooth', 0.11, 520);
+    playTone(260, 0.22, 'sine', 0.14, 660);
+  }
+
+  function playLandSound() {
+    playTone(115, 0.14, 'triangle', 0.2, 42);
   }
 
   function playFlipSound() {
-    playTone(523, 0.1, 'triangle', 0.15);
-    setTimeout(() => playTone(659, 0.1, 'triangle', 0.15), 70);
-    setTimeout(() => playTone(784, 0.18, 'triangle', 0.16), 140);
+    playTone(523, 0.12, 'triangle', 0.18);
+    setTimeout(() => playTone(659, 0.12, 'triangle', 0.18), 65);
+    setTimeout(() => playTone(784, 0.14, 'triangle', 0.18), 130);
+    setTimeout(() => playTone(1046, 0.26, 'sine', 0.2), 195);
   }
 
   function playBoostSound() {
-    playTone(300, 0.25, 'sawtooth', 0.08, 720);
+    playTone(220, 0.35, 'sawtooth', 0.12, 880);
+    playTone(330, 0.35, 'triangle', 0.14, 990);
   }
 
   function playBonkSound() {
-    playTone(180, 0.22, 'sawtooth', 0.14, 70);
+    playTone(160, 0.28, 'sawtooth', 0.22, 48);
+    playTone(95, 0.3, 'triangle', 0.24, 38);
   }
 
   function toggleMute() {
     isMuted = !isMuted;
     muteBtn.textContent = isMuted ? '🔇' : '🔊';
+    if (isMuted) silenceContinuousAudio();
   }
 
   // Input State
@@ -548,7 +644,10 @@
       if (c.x < -200) c.x = width + 220;
     }
 
-    if (state.mode !== 'playing') return;
+    if (state.mode !== 'playing') {
+      silenceContinuousAudio();
+      return;
+    }
 
     if (state.bannerTimer > 0) {
       state.bannerTimer -= dt;
@@ -563,6 +662,7 @@
     modeObj.update(dt, keys, jumpNow, {
       playStar: playStarSound,
       playJump: playJumpSound,
+      playLand: playLandSound,
       playFlip: playFlipSound,
       playBoost: playBoostSound,
       playBonk: playBonkSound,
@@ -577,6 +677,9 @@
       state.flips = s.tricks;
       state.score = s.score;
       updateHUD();
+      updateContinuousAudio(activeGame, s);
+    } else {
+      silenceContinuousAudio();
     }
     return;
 

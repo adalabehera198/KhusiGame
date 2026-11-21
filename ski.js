@@ -60,15 +60,12 @@
   }
   initEnvironment();
 
-  // Steep 3D Mountain Ski Slope Heightfield
-  // Continuous downhill drop + big rolling ski rollers & alpine valley walls
+  // Steep 3D Mountain Ski Slope Heightfield (100% freeform, endless in all directions)
   function getHillY(wx, wz) {
     const downhillDrop = -wz * 0.24;
     const rollers = Math.sin(wz * 0.055) * 6.5 + Math.cos(wz * 0.022) * 5.0;
-    const crossContour = Math.sin(wx * 0.08 + wz * 0.03) * 1.8;
-    const distFromCenter = Math.max(0, Math.abs(wx) - 20);
-    const valleySides = Math.min(22, distFromCenter * distFromCenter * 0.015);
-    return downhillDrop + rollers + crossContour + valleySides;
+    const crossContour = Math.sin(wx * 0.075 + wz * 0.03) * 2.2;
+    return downhillDrop + rollers + crossContour;
   }
 
   function getHillSlopeZ(wx, wz) {
@@ -290,6 +287,7 @@
         ski.vy = 0;
         ski.onGround = true;
         ski.spinAngle = 0;
+        if (callbacks.playLand) callbacks.playLand();
         emitSnow(ski.x, groundY + 0.1, nextWorldZ, 10);
       }
     }
@@ -741,6 +739,10 @@
         hearts: ski.hearts,
         tricks: ski.tricks,
         score: ski.distance + ski.bonusScore,
+        speed: ski.vz,
+        steer: Math.abs(ski.vx),
+        onGround: ski.onGround,
+        boost: ski.boostTimer > 0,
       };
     },
   };

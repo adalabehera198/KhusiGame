@@ -4,7 +4,6 @@
   const FAR_Z = 82;
   const NEAR_Z = 2.0;
   const PLAYER_Z_OFFSET = 4.2;
-  const RACE_FINISH_Z = 750; // 1500m desert rally
 
   const atv = {
     x: 0,
@@ -98,7 +97,7 @@
   }
 
   function spawnAhead(targetZ) {
-    while (atv.nextSpawnZ < targetZ && atv.nextSpawnZ < RACE_FINISH_Z - 10) {
+    while (atv.nextSpawnZ < targetZ) {
       const z = atv.nextSpawnZ;
       const center = atv.x;
       const roll = Math.random();
@@ -273,18 +272,19 @@
         atv.vy = 0;
         atv.onGround = true;
         atv.spinAngle = 0;
+        if (callbacks.playLand) callbacks.playLand();
         emitSand(atv.x, groundY + 0.1, nextWorldZ, 12);
       }
     }
 
-    // Update Rival Racers
+    // Update Rival Racers (freeform desert buddies racing alongside you)
     let aheadCount = 0;
     for (const r of rivals) {
-      const weave = Math.sin(time * 1.3 + r.phase) * 5.0;
-      const targetX = atv.x * 0.25 + weave;
-      r.x += (targetX - r.x) * Math.min(1, dt * 1.2);
+      const weave = Math.sin(time * 1.3 + r.phase) * 6.0;
+      const targetX = atv.x * 0.65 + weave;
+      r.x += (targetX - r.x) * Math.min(1, dt * 1.4);
       const diffZ = r.z - nextWorldZ;
-      const rubber = diffZ > 22 ? -2.2 : diffZ < -18 ? 2.5 : 0;
+      const rubber = diffZ > 24 ? -2.8 : diffZ < -18 ? 3.2 : 0;
       r.z += (r.baseSpeed + rubber) * dt;
       r.y = getDuneY(r.x, r.z);
 
@@ -294,19 +294,6 @@
       if (r.z > nextWorldZ) aheadCount++;
     }
     atv.place = 1 + aheadCount;
-
-    // Finish Line
-    if (nextWorldZ >= RACE_FINISH_Z && !atv.finished) {
-      atv.finished = true;
-      const placeBonus = (5 - atv.place) * 150;
-      atv.bonusScore += placeBonus;
-      const suffix = atv.place === 1 ? '1st 🥇' : atv.place === 2 ? '2nd 🥈' : atv.place === 3 ? '3rd 🥉' : '4th 🏁';
-      callbacks.playFlip();
-      callbacks.showBanner(`Finish! ${suffix} (+${placeBonus})`);
-      setTimeout(() => {
-        callbacks.triggerGameOver();
-      }, 900);
-    }
 
     // Camera follows rider & pitches smoothly with dune slope
     atv.camX += (atv.x - atv.camX) * Math.min(1, dt * 6.5);
@@ -472,22 +459,6 @@
       ctx.moveTo(a.x + oA, a.y);
       ctx.lineTo(b.x + oB, b.y);
       ctx.stroke();
-    }
-
-    // Finish Line Banner
-    if (RACE_FINISH_Z - atv.z > 1 && RACE_FINISH_Z - atv.z < FAR_Z) {
-      const fL = project(atv.camX - 18, getDuneY(atv.camX - 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
-      const fR = project(atv.camX + 18, getDuneY(atv.camX + 18, RACE_FINISH_Z), RACE_FINISH_Z, width, height);
-      if (fL && fR) {
-        ctx.strokeStyle = '#ff5400';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.moveTo(fL.x, fL.y);
-        ctx.lineTo(fL.x, fL.y - 70 * fL.persp);
-        ctx.lineTo(fR.x, fR.y - 70 * fR.persp);
-        ctx.lineTo(fR.x, fR.y);
-        ctx.stroke();
-      }
     }
 
     const drawList = [];
@@ -709,6 +680,10 @@
         hearts: atv.hearts,
         tricks: atv.tricks,
         score: atv.distance + atv.bonusScore,
+        speed: atv.vz,
+        steer: Math.abs(atv.vx),
+        onGround: atv.onGround,
+        boost: atv.boostTimer > 0,
       };
     },
   };
