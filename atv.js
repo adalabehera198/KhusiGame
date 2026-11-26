@@ -377,6 +377,20 @@
     spawnAhead(atv.z + FAR_Z);
 
     atv.distance = Math.floor(atv.z * 2);
+
+    if (window.Multiplayer && window.Multiplayer.isConnected()) {
+      window.Multiplayer.sendState({
+        x: atv.x,
+        y: atv.y,
+        z: nextWorldZ,
+        lean: atv.lean,
+        spinAngle: atv.spinAngle,
+        boost: atv.boostTimer > 0,
+        score: atv.distance + atv.bonusScore,
+        distance: atv.distance,
+        hearts: atv.hearts,
+      });
+    }
   }
 
   function render(ctx, width, height, time) {
@@ -482,6 +496,11 @@
       const p = project(r.x, r.y, r.z, width, height);
       if (p) drawList.push({ kind: 'rival', r, p });
     }
+    const remote = window.Multiplayer ? window.Multiplayer.getRemotePlayer() : null;
+    if (remote) {
+      const rp = project(remote.x, remote.y, remote.z, width, height);
+      if (rp) drawList.push({ kind: 'remote', remote, p: rp });
+    }
     const playerWorldZ = atv.z + PLAYER_Z_OFFSET;
     const playerGroundY = getDuneY(atv.x, playerWorldZ);
     const playerProj = project(atv.x, atv.y, playerWorldZ, width, height);
@@ -495,7 +514,17 @@
     for (const entry of drawList) {
       if (entry.kind === 'item') drawItem(ctx, entry.item, entry.p, time);
       else if (entry.kind === 'rival') drawATV3D(ctx, entry.p, null, 0, entry.r.color, entry.r.helmet, 0, 0, false, time);
-      else drawATV3D(ctx, entry.p, entry.shadowP, entry.h, atv.boostTimer > 0 ? '#ff006e' : '#ff9f1c', '#ff5400', atv.lean, atv.spinAngle, true, time);
+      else if (entry.kind === 'remote') {
+        drawATV3D(ctx, entry.p, null, 0, entry.remote.boost ? '#ff006e' : '#ff4d6d', '#ffd166', entry.remote.lean, entry.remote.spinAngle, false, time);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(entry.remote.name, entry.p.x, entry.p.y - 68 * entry.p.persp * 1.45);
+        ctx.restore();
+      } else {
+        drawATV3D(ctx, entry.p, entry.shadowP, entry.h, atv.boostTimer > 0 ? '#ff006e' : '#ff9f1c', '#ff5400', atv.lean, atv.spinAngle, true, time);
+      }
     }
 
     for (const pt of particles) {

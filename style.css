@@ -416,6 +416,82 @@ html, body {
   transform: scale(0.96);
 }
 
+/* Multiplayer Panel */
+.mp-box {
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #ffd166;
+  border-radius: 18px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-title {
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: #3a2010;
+}
+
+.mp-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mp-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid #e6d5c3;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #2b1608;
+  background: #fff;
+  outline: none;
+}
+
+.mp-input:focus {
+  border-color: #ff9f1c;
+}
+
+.mp-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ff9f1c, #ff5400);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.mp-btn.join-btn {
+  background: linear-gradient(135deg, #00b4d8, #0077b6);
+}
+
+.mp-status {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0077b6;
+  background: #e6f7ff;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.mp-copy-btn {
+  border: 2px dashed #0096c7;
+  background: #f0fbff;
+  color: #0077b6;
+  font-weight: 800;
+  font-size: 0.84rem;
+  padding: 7px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
 @media (max-width: 560px) {
   .card {
     padding: 22px 18px;

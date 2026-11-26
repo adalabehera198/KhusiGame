@@ -29,6 +29,78 @@
   const muteBtn = document.getElementById('mute-btn');
   const pauseBtn = document.getElementById('pause-btn');
 
+  // Multiplayer UI
+  const playerNameInput = document.getElementById('player-name-input');
+  const createRoomBtn = document.getElementById('create-room-btn');
+  const roomCodeInput = document.getElementById('room-code-input');
+  const joinRoomBtn = document.getElementById('join-room-btn');
+  const mpStatusEl = document.getElementById('mp-status');
+  const copyLinkBtn = document.getElementById('copy-link-btn');
+  const friendHudEl = document.getElementById('friend-hud');
+  const friendDistEl = document.getElementById('friend-dist');
+
+  let activeRoomCode = '';
+
+  function showMpStatus(msg) {
+    mpStatusEl.textContent = msg;
+    mpStatusEl.classList.remove('hidden');
+  }
+
+  if (window.Multiplayer) {
+    window.Multiplayer.setCallbacks({
+      onRoomReady(code) {
+        activeRoomCode = code;
+        showMpStatus(`Room ${code} ready! Share the code or link, then pick ATV or Ski above.`);
+        copyLinkBtn.classList.remove('hidden');
+      },
+      onConnected(asHost) {
+        copyLinkBtn.classList.add('hidden');
+        if (asHost) {
+          showMpStatus('Connected! Click "Play ATV!" or "Play Ski!" above to start together!');
+        } else {
+          showMpStatus('Connected! Waiting for host to pick ATV or Ski...');
+        }
+      },
+      onStartGame(mode) {
+        startGame(mode, true);
+      },
+      onDisconnected() {
+        friendHudEl.classList.add('hidden');
+        showMpStatus('Friend disconnected.');
+      },
+      onError(msg) {
+        showMpStatus(`Oops: ${msg}`);
+      },
+    });
+  }
+
+  createRoomBtn.addEventListener('click', () => {
+    showMpStatus('Creating room...');
+    window.Multiplayer.createRoom(playerNameInput.value || 'Dad');
+  });
+
+  joinRoomBtn.addEventListener('click', () => {
+    showMpStatus('Joining room...');
+    window.Multiplayer.joinRoom(roomCodeInput.value, playerNameInput.value || 'Khusi');
+  });
+
+  copyLinkBtn.addEventListener('click', () => {
+    const url = `${window.location.origin}${window.location.pathname}?room=${activeRoomCode}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        copyLinkBtn.textContent = '✅ Link Copied!';
+        setTimeout(() => { copyLinkBtn.textContent = '🔗 Copy Invite Link'; }, 2000);
+      }).catch(() => {});
+    }
+  });
+
+  // Auto-fill room code from URL ?room=XXXX
+  const urlRoom = new URLSearchParams(window.location.search).get('room');
+  if (urlRoom) {
+    roomCodeInput.value = urlRoom;
+    showMpStatus(`Room ${urlRoom} ready to join — enter your name and click Join Room!`);
+  }
+
   let activeGame = 'atv'; // 'atv' | 'ski'
 
   // Buttons
@@ -452,9 +524,12 @@
     updateHUD();
   }
 
-  function startGame(gameMode = 'atv') {
+  function startGame(gameMode = 'atv', fromRemote = false) {
     activeGame = gameMode;
     ensureAudio();
+    if (!fromRemote && window.Multiplayer && window.Multiplayer.isConnected() && window.Multiplayer.isHost()) {
+      window.Multiplayer.sendStart(activeGame);
+    }
     state.bannerTimer = 0;
     trickBannerEl.classList.add('hidden');
     const modeObj = activeGame === 'ski' ? window.SkiMode : window.AtvRaceMode;
@@ -544,6 +619,13 @@
     distanceCountEl.textContent = `${state.distance}m`;
     scoreCountEl.textContent = state.score;
     heartsDisplayEl.textContent = '❤️'.repeat(Math.max(0, state.hearts)) + '🤍'.repeat(Math.max(0, 3 - state.hearts));
+    const remote = window.Multiplayer ? window.Multiplayer.getRemotePlayer() : null;
+    if (remote) {
+      friendHudEl.classList.remove('hidden');
+      friendDistEl.textContent = `${remote.name}: ${remote.distance}m`;
+    } else {
+      friendHudEl.classList.add('hidden');
+    }
   }
 
   // Spawning Stars, Boost Pads, and Desert Props

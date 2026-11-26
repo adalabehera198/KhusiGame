@@ -24,6 +24,7 @@
         <div class="hud-pill hearts" id="hearts-display" title="Hearts">❤️❤️❤️</div>
       </div>
       <div class="hud-right">
+        <div class="hud-pill hidden" id="friend-hud">👥 <span id="friend-dist">Friend: 0m</span></div>
         <div class="hud-pill score-pill">
           Score: <strong id="score-count">0</strong>
         </div>
@@ -81,6 +82,20 @@
           </button>
         </div>
 
+        <div class="mp-box">
+          <div class="mp-title">👥 Play Together (2 Devices)</div>
+          <div class="mp-row">
+            <input id="player-name-input" class="mp-input" type="text" maxlength="14" placeholder="Your name (e.g. Dad / Khusi)" />
+            <button id="create-room-btn" class="mp-btn">Create Room</button>
+          </div>
+          <div class="mp-row">
+            <input id="room-code-input" class="mp-input code-input" type="text" maxlength="6" placeholder="4-digit code" />
+            <button id="join-room-btn" class="mp-btn join-btn">Join Room</button>
+          </div>
+          <div id="mp-status" class="mp-status hidden"></div>
+          <button id="copy-link-btn" class="mp-copy-btn hidden">🔗 Copy Invite Link</button>
+        </div>
+
         <div class="controls-help">
           <span><strong>Steer Left / Right:</strong> ← / → or A / D</span>
           <span><strong>Gas / Tuck:</strong> ↑ or W</span>
@@ -136,6 +151,8 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="multiplayer.js"></script>
   <script src="atv.js"></script>
   <script src="ski.js"></script>
   <script src="game.js"></script>

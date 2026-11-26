@@ -377,6 +377,20 @@
     spawnAhead(ski.z + FAR_Z);
 
     ski.distance = Math.floor(ski.z * 2);
+
+    if (window.Multiplayer && window.Multiplayer.isConnected()) {
+      window.Multiplayer.sendState({
+        x: ski.x,
+        y: ski.y,
+        z: nextWorldZ,
+        lean: ski.lean,
+        spinAngle: ski.spinAngle,
+        boost: ski.boostTimer > 0,
+        score: ski.distance + ski.bonusScore,
+        distance: ski.distance,
+        hearts: ski.hearts,
+      });
+    }
   }
 
   function render(ctx, width, height, time) {
@@ -510,6 +524,11 @@
       const p = project(item.x, wy, item.z, width, height);
       if (p) drawList.push({ kind: 'item', item, p });
     }
+    const remote = window.Multiplayer ? window.Multiplayer.getRemotePlayer() : null;
+    if (remote) {
+      const rp = project(remote.x, remote.y, remote.z, width, height);
+      if (rp) drawList.push({ kind: 'remote', remote, p: rp });
+    }
     const skierGroundY = getHillY(ski.x, skierWorldZ);
     const skierProj = project(ski.x, ski.y, skierWorldZ, width, height);
     const skierShadowProj = project(ski.x, skierGroundY, skierWorldZ, width, height);
@@ -521,8 +540,16 @@
     for (const entry of drawList) {
       if (entry.kind === 'item') {
         drawItem(ctx, entry.item, entry.p, time);
+      } else if (entry.kind === 'remote') {
+        drawSkier(ctx, entry.p, null, 0, entry.remote.lean, entry.remote.spinAngle, '#7209b7', false);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(entry.remote.name, entry.p.x, entry.p.y - 68 * entry.p.persp * 1.45);
+        ctx.restore();
       } else {
-        drawSkier(ctx, entry.p, entry.shadowP, Math.max(0, ski.y - skierGroundY));
+        drawSkier(ctx, entry.p, entry.shadowP, Math.max(0, ski.y - skierGroundY), ski.lean, ski.spinAngle, '#ff4d6d', true);
       }
     }
 
@@ -705,8 +732,8 @@
     ctx.restore();
   }
 
-  function drawSkier(ctx, p, shadowP, heightAboveSnow) {
-    if (ski.invulnTimer > 0 && Math.floor(ski.invulnTimer * 12) % 2 === 0) {
+  function drawSkier(ctx, p, shadowP, heightAboveSnow, lean = ski.lean, spinAngle = ski.spinAngle, jacketCol = '#ff4d6d', isLocal = true) {
+    if (isLocal && ski.invulnTimer > 0 && Math.floor(ski.invulnTimer * 12) % 2 === 0) {
       return;
     }
 
@@ -722,7 +749,7 @@
 
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.rotate(ski.lean + ski.spinAngle);
+    ctx.rotate(lean + spinAngle);
 
     // Carved Parabolic Skis with metallic edges & upturned tips
     const skiCol = ski.boostTimer > 0 ? '#ff006e' : '#e63946';
@@ -770,7 +797,7 @@
     ctx.fill();
 
     // Puffy Ski Jacket (shaded)
-    ctx.fillStyle = '#ff4d6d';
+    ctx.fillStyle = jacketCol;
     ctx.beginPath();
     ctx.roundRect(-12 * s, -39 * s, 24 * s, 24 * s, 8 * s);
     ctx.fill();
